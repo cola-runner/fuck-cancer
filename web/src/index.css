@@ -1,0 +1,71 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-apple-bg: #f5f5f7;
+  --color-apple-text: #1d1d1f;
+  --color-apple-secondary: #86868b;
+  --color-apple-accent: #0071e3;
+  --color-apple-accent-hover: #0077ED;
+  --color-apple-card: #ffffff;
+  --color-apple-border: #d2d2d7;
+  --color-apple-success: #34c759;
+  --color-apple-danger: #ff3b30;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Helvetica Neue', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f5f5f7;
+  color: #1d1d1f;
+  line-height: 1.47059;
+  font-size: 17px;
+  letter-spacing: -0.022em;
+}
+
+#root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+::selection {
+  background-color: rgba(0, 113, 227, 0.2);
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
