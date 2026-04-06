@@ -11,25 +11,26 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "fastify": "^5.2.1",
-    "@fastify/cors": "^11.0.1",
     "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.0.1",
     "@fastify/multipart": "^9.0.3",
-    "googleapis": "^144.0.0",
-    "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
-    "pg": "^8.13.1",
-    "drizzle-orm": "^0.38.3",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
     "drizzle-kit": "^0.30.4",
-    "dotenv": "^16.4.7"
+    "drizzle-orm": "^0.38.3",
+    "fastify": "^5.2.1",
+    "googleapis": "^144.0.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "@types/node": "^22.10.7",
-    "@types/jsonwebtoken": "^9.0.7",
     "@types/bcryptjs": "^2.4.6",
-    "@types/pg": "^8.11.10",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.7",
+    "nodemon": "^3.1.9",
+    "pino-pretty": "^13.1.3",
     "tsx": "^4.19.2",
-    "nodemon": "^3.1.9"
+    "typescript": "^5.7.3"
   }
 }

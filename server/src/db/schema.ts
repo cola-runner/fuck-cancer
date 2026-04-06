@@ -1,53 +1,72 @@
-import {
-  pgTable,
-  uuid,
-  varchar,
-  text,
-  timestamp,
-  date,
-  jsonb,
-} from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { randomUUID } from "node:crypto";
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: varchar("email", { length: 255 }).unique().notNull(),
-  name: varchar("name", { length: 255 }),
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  email: text("email").notNull().unique(),
+  name: text("name"),
   googleToken: text("google_token"),
-  llmProvider: varchar("llm_provider", { length: 50 }),
+  llmProvider: text("llm_provider"),
   llmApiKey: text("llm_api_key"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date()
+  ),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date()
+  ),
 });
 
-export const cases = pgTable("cases", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id),
-  patientName: varchar("patient_name", { length: 255 }).notNull(),
+export const cases = sqliteTable("cases", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  patientName: text("patient_name").notNull(),
   diagnosis: text("diagnosis"),
   notes: text("notes"),
-  driveFolderId: varchar("drive_folder_id", { length: 255 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  driveFolderId: text("drive_folder_id"),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date()
+  ),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date()
+  ),
 });
 
-export const documents = pgTable("documents", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  caseId: uuid("case_id").references(() => cases.id),
-  driveFileId: varchar("drive_file_id", { length: 255 }).notNull(),
-  fileName: varchar("file_name", { length: 255 }),
-  fileType: varchar("file_type", { length: 50 }),
-  category: varchar("category", { length: 50 }),
-  docDate: date("doc_date"),
+export const documents = sqliteTable("documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => cases.id, { onDelete: "cascade" }),
+  driveFileId: text("drive_file_id").notNull(),
+  fileName: text("file_name"),
+  fileType: text("file_type"),
+  category: text("category"),
+  docDate: text("doc_date"), // ISO date string YYYY-MM-DD
   ocrText: text("ocr_text"),
   aiSummary: text("ai_summary"),
-  aiMetadata: jsonb("ai_metadata"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  aiMetadata: text("ai_metadata", { mode: "json" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date()
+  ),
 });
 
-export const conversations = pgTable("conversations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  caseId: uuid("case_id").references(() => cases.id),
-  role: varchar("role", { length: 20 }).notNull(),
+export const conversations = sqliteTable("conversations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => randomUUID()),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => cases.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
   content: text("content").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date()
+  ),
 });

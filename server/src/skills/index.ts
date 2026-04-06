@@ -5,7 +5,7 @@ import { DailyMedSkill } from "./dailymed.js";
 import { NIHClinicalSkill } from "./nih-clinical.js";
 import { GuidelinesSkill } from "./guidelines.js";
 
-export { ToolDefinition, ToolResult } from "./types.js";
+export type { ToolDefinition, ToolResult } from "./types.js";
 
 export class SkillRegistry {
   private skills: Map<string, MedicalSkill> = new Map();
