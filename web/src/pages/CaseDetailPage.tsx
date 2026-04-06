@@ -85,8 +85,11 @@ export default function CaseDetailPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-[3px] border-[#0071e3] border-t-transparent rounded-full animate-spin" />
+        <div className="flex justify-center py-32">
+          <div
+            className="w-7 h-7 rounded-full animate-spin"
+            style={{ border: '2.5px solid #059669', borderTopColor: 'transparent' }}
+          />
         </div>
       </Layout>
     );
@@ -95,8 +98,8 @@ export default function CaseDetailPage() {
   if (!caseData) {
     return (
       <Layout>
-        <div className="text-center py-20">
-          <p className="text-[17px] text-[#86868b]">病例不存在</p>
+        <div className="text-center py-32">
+          <p style={{ fontSize: '17px', color: '#64748d' }}>病例不存在</p>
         </div>
       </Layout>
     );
@@ -104,24 +107,48 @@ export default function CaseDetailPage() {
 
   return (
     <Layout>
-      <div className="max-w-[980px] mx-auto px-6 py-8">
+      <div className="max-w-[1100px] mx-auto px-6 py-10">
         {/* Back button */}
         <button
           onClick={() => navigate('/cases')}
-          className="flex items-center gap-1 text-[15px] text-[#0071e3] hover:text-[#0077ED] mb-6 cursor-pointer transition-colors"
+          className="flex items-center gap-1 mb-8 cursor-pointer transition-colors"
+          style={{ fontSize: '14px', color: '#059669', background: 'none', border: 'none', padding: 0 }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = '#047857';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = '#059669';
+          }}
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
           </svg>
-          返回病例列表
+          病例列表
         </button>
 
-        {/* Patient Info Bar */}
-        <div className="bg-white rounded-2xl p-6 shadow-[rgba(0,0,0,0.08)_0_2px_8px] mb-8">
+        {/* Patient Info Card */}
+        <div
+          className="mb-10"
+          style={{
+            backgroundColor: '#ffffff',
+            border: '1px solid #e5edf5',
+            borderRadius: '8px',
+            padding: '32px',
+            boxShadow: 'rgba(50,50,93,0.1) 0 2px 5px -1px, rgba(0,0,0,0.06) 0 1px 3px -1px',
+          }}
+        >
           {editing ? (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <label className="block text-[13px] font-medium text-[#86868b] mb-1">
+                <label
+                  className="block mb-2 uppercase"
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: '#273951',
+                    letterSpacing: '0.5px',
+                  }}
+                >
                   患者姓名
                 </label>
                 <input
@@ -130,11 +157,36 @@ export default function CaseDetailPage() {
                   onChange={(e) =>
                     setEditForm((f) => ({ ...f, patientName: e.target.value }))
                   }
-                  className="w-full h-[44px] px-4 text-[17px] text-[#1d1d1f] bg-[#f5f5f7] rounded-xl outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
+                  className="w-full outline-none transition-all"
+                  style={{
+                    height: '44px',
+                    padding: '0 12px',
+                    fontSize: '15px',
+                    color: '#061b31',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e5edf5',
+                    borderRadius: '6px',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#059669';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(5,150,105,0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e5edf5';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
               <div>
-                <label className="block text-[13px] font-medium text-[#86868b] mb-1">
+                <label
+                  className="block mb-2 uppercase"
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: '#273951',
+                    letterSpacing: '0.5px',
+                  }}
+                >
                   诊断信息
                 </label>
                 <input
@@ -143,19 +195,63 @@ export default function CaseDetailPage() {
                   onChange={(e) =>
                     setEditForm((f) => ({ ...f, diagnosis: e.target.value }))
                   }
-                  className="w-full h-[44px] px-4 text-[17px] text-[#1d1d1f] bg-[#f5f5f7] rounded-xl outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
+                  className="w-full outline-none transition-all"
+                  style={{
+                    height: '44px',
+                    padding: '0 12px',
+                    fontSize: '15px',
+                    color: '#061b31',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e5edf5',
+                    borderRadius: '6px',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#059669';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(5,150,105,0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e5edf5';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-1">
                 <button
                   onClick={() => setEditing(false)}
-                  className="h-[36px] px-5 text-[14px] text-[#0071e3] bg-[#f5f5f7] hover:bg-[#e8e8ed] rounded-lg transition-colors cursor-pointer"
+                  className="cursor-pointer transition-colors"
+                  style={{
+                    height: '36px',
+                    padding: '0 20px',
+                    fontSize: '14px',
+                    fontWeight: 400,
+                    color: '#059669',
+                    backgroundColor: 'rgba(5,150,105,0.06)',
+                    border: '1px solid rgba(83,58,253,0.2)',
+                    borderRadius: '6px',
+                  }}
                 >
                   取消
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="h-[36px] px-5 text-[14px] text-white bg-[#0071e3] hover:bg-[#0077ED] rounded-lg transition-colors cursor-pointer"
+                  className="cursor-pointer transition-all"
+                  style={{
+                    height: '36px',
+                    padding: '0 20px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    color: '#ffffff',
+                    backgroundColor: '#059669',
+                    border: 'none',
+                    borderRadius: '6px',
+                    boxShadow: 'rgba(50,50,93,0.11) 0 4px 6px, rgba(0,0,0,0.08) 0 1px 3px',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#047857';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#059669';
+                  }}
                 >
                   保存
                 </button>
@@ -164,21 +260,57 @@ export default function CaseDetailPage() {
           ) : (
             <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-[28px] font-bold text-[#1d1d1f] tracking-tight">
+                <h1
+                  style={{
+                    fontSize: '34px',
+                    fontWeight: 300,
+                    color: '#061b31',
+                    letterSpacing: '-0.6px',
+                    lineHeight: 1.2,
+                  }}
+                >
                   {caseData.patientName}
                 </h1>
-                <p className="text-[17px] text-[#86868b] mt-1">
-                  {caseData.diagnosis}
-                </p>
-                <p className="text-[13px] text-[#aeaeb2] mt-2">
+                <div className="mt-3">
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      backgroundColor: 'rgba(5,150,105,0.08)',
+                      color: '#059669',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      borderRadius: '4px',
+                      padding: '4px 12px',
+                    }}
+                  >
+                    {caseData.diagnosis}
+                  </span>
+                </div>
+                <p
+                  className="mt-3"
+                  style={{ fontSize: '13px', color: '#64748d' }}
+                >
                   创建于 {formatDate(caseData.createdAt)}
                 </p>
               </div>
               <button
                 onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 text-[14px] text-[#0071e3] hover:text-[#0077ED] cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 cursor-pointer transition-colors mt-1"
+                style={{
+                  fontSize: '14px',
+                  color: '#059669',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#047857';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#059669';
+                }}
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                 </svg>
                 编辑
@@ -187,29 +319,56 @@ export default function CaseDetailPage() {
           )}
         </div>
 
-        {/* Section Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-[22px] font-semibold text-[#1d1d1f]">
-            文件资料
-          </h2>
-          <span className="text-[15px] text-[#86868b]">
-            {documents.length} 份文件
-          </span>
+        {/* Documents Section Header */}
+        <div className="mt-10 mb-4">
+          <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid #e5edf5' }}>
+            <span
+              className="uppercase"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: '#273951',
+                letterSpacing: '0.5px',
+              }}
+            >
+              文件资料
+            </span>
+            <span style={{ fontSize: '13px', color: '#64748d' }}>
+              {documents.length > 0 ? `${documents.length} 份` : ''}
+            </span>
+          </div>
         </div>
 
         {/* Document List */}
         {documents.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl shadow-[rgba(0,0,0,0.08)_0_2px_8px]">
-            <div className="w-16 h-16 mx-auto mb-4 bg-[#f5f5f7] rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-[#aeaeb2]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <div
+            className="flex flex-col items-center text-center py-20"
+            style={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #e5edf5',
+              borderRadius: '8px',
+            }}
+          >
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+              style={{ backgroundColor: 'rgba(5,150,105,0.08)' }}
+            >
+              <svg
+                className="w-7 h-7"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.2}
+                stroke="currentColor"
+                style={{ color: '#059669' }}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
               </svg>
             </div>
-            <p className="text-[17px] text-[#86868b] mb-1">
+            <p style={{ fontSize: '16px', fontWeight: 500, color: '#061b31' }} className="mb-1">
               暂无文件
             </p>
-            <p className="text-[15px] text-[#aeaeb2]">
-              点击右下角按钮上传文件
+            <p style={{ fontSize: '14px', color: '#64748d' }}>
+              点击右下角 + 按钮上传文件
             </p>
           </div>
         ) : (
@@ -222,36 +381,92 @@ export default function CaseDetailPage() {
           </div>
         )}
 
-        {/* AI Chat Entry */}
+        {/* AI Chat Entry Card */}
         <div className="mt-8">
           <button
             onClick={() => navigate(`/cases/${id}/chat`)}
-            className="w-full bg-white rounded-2xl p-6 shadow-[rgba(0,0,0,0.08)_0_2px_8px] hover:shadow-[rgba(0,0,0,0.12)_0_4px_16px] transition-all duration-300 cursor-pointer group flex items-center gap-4"
+            className="w-full cursor-pointer transition-all duration-300 group flex items-stretch overflow-hidden"
+            style={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #e5edf5',
+              borderRadius: '8px',
+              boxShadow: 'rgba(50,50,93,0.1) 0 2px 5px -1px, rgba(0,0,0,0.06) 0 1px 3px -1px',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.boxShadow =
+                'rgba(50,50,93,0.25) 0 6px 12px -2px, rgba(0,0,0,0.1) 0 3px 7px -3px';
+              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.boxShadow =
+                'rgba(50,50,93,0.1) 0 2px 5px -1px, rgba(0,0,0,0.06) 0 1px 3px -1px';
+              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
+            }}
           >
-            <div className="w-12 h-12 bg-gradient-to-br from-[#0071e3] to-[#40a9ff] rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+            {/* Left gradient strip */}
+            <div
+              className="w-1.5 flex-shrink-0"
+              style={{ background: 'linear-gradient(to bottom, #059669, #047857)' }}
+            />
+
+            <div className="flex items-center gap-5 flex-1 p-6 text-left">
+              <div>
+                <h3
+                  style={{ fontSize: '16px', fontWeight: 600, color: '#061b31' }}
+                >
+                  AI 病情分析
+                </h3>
+                <p
+                  className="mt-0.5"
+                  style={{ fontSize: '14px', color: '#64748d' }}
+                >
+                  基于病例资料进行 AI 问答
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="flex items-center pr-6"
+              style={{ color: '#64748d' }}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2.5}
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
               </svg>
             </div>
-            <div className="text-left flex-1">
-              <h3 className="text-[17px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors">
-                AI 对话
-              </h3>
-              <p className="text-[15px] text-[#86868b]">
-                基于病例资料进行 AI 问答
-              </p>
-            </div>
-            <svg className="w-5 h-5 text-[#aeaeb2] group-hover:text-[#0071e3] transition-colors" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-            </svg>
           </button>
         </div>
+
+        {/* Bottom spacer for FAB */}
+        <div className="h-24" />
       </div>
 
       {/* Upload FAB */}
       <button
         onClick={() => setShowUpload(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-[#0071e3] hover:bg-[#0077ED] text-white rounded-full shadow-[rgba(0,113,227,0.4)_0_4px_16px] flex items-center justify-center cursor-pointer transition-all duration-200 active:scale-[0.92] z-40"
+        className="fixed bottom-8 right-8 flex items-center justify-center cursor-pointer transition-all duration-200 z-40"
+        style={{
+          width: '56px',
+          height: '56px',
+          backgroundColor: '#059669',
+          color: '#ffffff',
+          borderRadius: '50%',
+          border: 'none',
+          boxShadow: 'rgba(5,150,105,0.4) 0 4px 15px',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#047857';
+          (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#059669';
+          (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
+        }}
       >
         <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

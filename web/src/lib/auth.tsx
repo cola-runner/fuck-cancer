@@ -29,6 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
+    // PREVIEW MODE: bypass auth for UI preview
+    if (import.meta.env.VITE_PREVIEW_MODE === 'true') {
+      setUser({ id: 'preview', email: 'preview@fuckcancer.dev', name: 'Preview User' });
+      setLoading(false);
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       if (!token) {

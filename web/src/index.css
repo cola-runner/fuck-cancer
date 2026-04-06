@@ -1,17 +1,17 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-apple-bg: #f5f5f7;
-  --color-apple-text: #1d1d1f;
-  --color-apple-secondary: #86868b;
-  --color-apple-accent: #0071e3;
-  --color-apple-accent-hover: #0077ED;
-  --color-apple-card: #ffffff;
-  --color-apple-border: #d2d2d7;
-  --color-apple-success: #34c759;
-  --color-apple-danger: #ff3b30;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    'Helvetica Neue', sans-serif;
+  --color-stripe-purple: #059669;
+  --color-stripe-purple-hover: #047857;
+  --color-stripe-navy: #061b31;
+  --color-stripe-dark: #064e3b;
+  --color-stripe-body: #64748d;
+  --color-stripe-label: #273951;
+  --color-stripe-border: #e5edf5;
+  --color-stripe-success: #15be53;
+  --color-stripe-success-text: #108c3d;
+  --color-stripe-ruby: #ea2261;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
 }
 
 * {
@@ -23,16 +23,16 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "kern";
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #f5f5f7;
-  color: #1d1d1f;
-  line-height: 1.47059;
-  font-size: 17px;
-  letter-spacing: -0.022em;
+  background-color: #ffffff;
+  color: #64748d;
+  line-height: 1.5;
+  font-size: 16px;
 }
 
 #root {
@@ -42,7 +42,7 @@ body {
 }
 
 ::selection {
-  background-color: rgba(0, 113, 227, 0.2);
+  background-color: rgba(83, 58, 253, 0.15);
 }
 
 input,
@@ -50,6 +50,7 @@ textarea,
 select,
 button {
   font-family: inherit;
+  font-feature-settings: "ss01", "kern";
 }
 
 /* Scrollbar styling */
