@@ -84,7 +84,7 @@ export default function Layout({ children }: LayoutProps) {
                     src={user.avatar}
                     alt=""
                     className="w-[28px] h-[28px] rounded-full object-cover cursor-pointer transition-all"
-                    style={{ ring: '1px solid transparent' }}
+                    style={{ border: '1px solid transparent' }}
                   />
                 ) : (
                   <div

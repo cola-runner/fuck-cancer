@@ -1,15 +1,25 @@
 import { google, drive_v3 } from "googleapis";
 import { Readable } from "node:stream";
+import { config } from "./config.js";
+
+export interface GoogleTokens {
+  access_token?: string;
+  refresh_token?: string;
+  scope?: string;
+  token_type?: string;
+  expiry_date?: number;
+  id_token?: string;
+}
 
 export class GoogleDriveService {
   private drive: drive_v3.Drive;
 
-  constructor(accessToken: string) {
+  constructor(tokens: GoogleTokens) {
     const auth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
+      config.googleClientId,
+      config.googleClientSecret
     );
-    auth.setCredentials({ access_token: accessToken });
+    auth.setCredentials(tokens);
     this.drive = google.drive({ version: "v3", auth });
   }
 

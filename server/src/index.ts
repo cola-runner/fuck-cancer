@@ -1,11 +1,9 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 
+import { config } from "./lib/config.js";
 import { authRoutes } from "./routes/auth.js";
 import { casesRoutes } from "./routes/cases.js";
 import { documentsRoutes } from "./routes/documents.js";
@@ -14,9 +12,9 @@ import { settingsRoutes } from "./routes/settings.js";
 
 const fastify = Fastify({
   logger: {
-    level: process.env.LOG_LEVEL || "info",
+    level: config.logLevel,
     transport:
-      process.env.NODE_ENV !== "production"
+      config.nodeEnv !== "production"
         ? { target: "pino-pretty" }
         : undefined,
   },
@@ -25,7 +23,7 @@ const fastify = Fastify({
 async function start(): Promise<void> {
   // Register plugins
   await fastify.register(cors, {
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    origin: config.corsOrigin,
     credentials: true,
   });
 
@@ -39,7 +37,11 @@ async function start(): Promise<void> {
 
   // Health check
   fastify.get("/api/health", async () => {
-    return { status: "ok", timestamp: new Date().toISOString() };
+    return {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      mode: "self-hosted",
+    };
   });
 
   // Register routes
@@ -50,8 +52,8 @@ async function start(): Promise<void> {
   await fastify.register(settingsRoutes);
 
   // Start server
-  const port = parseInt(process.env.PORT || "3000", 10);
-  const host = process.env.HOST || "0.0.0.0";
+  const port = config.port;
+  const host = config.host;
 
   await fastify.listen({ port, host });
   fastify.log.info(`Server running at http://${host}:${port}`);

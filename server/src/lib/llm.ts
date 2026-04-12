@@ -12,7 +12,11 @@ export interface LLMOptions {
 
 export interface LLMProvider {
   chat(messages: ChatMessage[], options?: LLMOptions): Promise<string>;
-  analyzeImage(imageBase64: string, prompt: string): Promise<string>;
+  analyzeImage(
+    imageBase64: string,
+    mimeType: string,
+    prompt: string
+  ): Promise<string>;
   chatWithTools(
     messages: ChatMessage[],
     tools: ToolDefinition[],
@@ -87,6 +91,7 @@ export class GeminiProvider implements LLMProvider {
 
   async analyzeImage(
     imageBase64: string,
+    mimeType: string,
     prompt: string
   ): Promise<string> {
     const body = {
@@ -95,7 +100,7 @@ export class GeminiProvider implements LLMProvider {
           parts: [
             {
               inlineData: {
-                mimeType: "image/jpeg",
+                mimeType,
                 data: imageBase64,
               },
             },
@@ -312,6 +317,7 @@ export class ClaudeProvider implements LLMProvider {
 
   async analyzeImage(
     imageBase64: string,
+    mimeType: string,
     prompt: string
   ): Promise<string> {
     const body = {
@@ -325,7 +331,7 @@ export class ClaudeProvider implements LLMProvider {
               type: "image",
               source: {
                 type: "base64",
-                media_type: "image/jpeg",
+                media_type: mimeType,
                 data: imageBase64,
               },
             },
@@ -526,6 +532,7 @@ export class OpenAIProvider implements LLMProvider {
 
   async analyzeImage(
     imageBase64: string,
+    mimeType: string,
     prompt: string
   ): Promise<string> {
     const body = {
@@ -537,7 +544,7 @@ export class OpenAIProvider implements LLMProvider {
             {
               type: "image_url",
               image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
+                url: `data:${mimeType};base64,${imageBase64}`,
               },
             },
             { type: "text", text: prompt },

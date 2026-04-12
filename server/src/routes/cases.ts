@@ -1,7 +1,7 @@
-import { FastifyInstance } from "fastify";
+import type { FastifyReply, FastifyRequest, FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
-import { cases } from "../db/schema.js";
-import { eq, and } from "drizzle-orm";
+import { cases, documents } from "../db/schema.js";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth.js";
 import { GoogleDriveService } from "../lib/google-drive.js";
 import { decrypt } from "../lib/encryption.js";
@@ -13,10 +13,22 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
   // List all cases for the current user
   fastify.get("/api/cases", async (request, reply) => {
     const userCases = await db
-      .select()
+      .select({
+        id: cases.id,
+        userId: cases.userId,
+        patientName: cases.patientName,
+        diagnosis: cases.diagnosis,
+        notes: cases.notes,
+        driveFolderId: cases.driveFolderId,
+        createdAt: cases.createdAt,
+        updatedAt: cases.updatedAt,
+        fileCount: sql<number>`count(${documents.id})`,
+      })
       .from(cases)
+      .leftJoin(documents, eq(documents.caseId, cases.id))
       .where(eq(cases.userId, request.user.id))
-      .orderBy(cases.createdAt);
+      .groupBy(cases.id)
+      .orderBy(desc(cases.updatedAt));
 
     return reply.send({ cases: userCases });
   });
@@ -56,7 +68,7 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
     if (request.user.googleToken) {
       try {
         const tokens = JSON.parse(decrypt(request.user.googleToken));
-        const driveService = new GoogleDriveService(tokens.access_token);
+        const driveService = new GoogleDriveService(tokens);
         const folderName = `FuckCancer - ${patientName}`;
         driveFolderId = await driveService.createFolder(folderName);
       } catch (err) {
@@ -83,10 +95,15 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   // Update a case
-  fastify.put<{
+  type UpdateCaseRequest = FastifyRequest<{
     Params: { id: string };
     Body: { patientName?: string; diagnosis?: string; notes?: string };
-  }>("/api/cases/:id", async (request, reply) => {
+  }>;
+
+  const updateCase = async (
+    request: UpdateCaseRequest,
+    reply: FastifyReply
+  ) => {
     const { id } = request.params;
     const { patientName, diagnosis, notes } = request.body;
 
@@ -113,7 +130,17 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
       .returning();
 
     return reply.send({ case: updated });
-  });
+  };
+
+  fastify.put<{
+    Params: { id: string };
+    Body: { patientName?: string; diagnosis?: string; notes?: string };
+  }>("/api/cases/:id", updateCase);
+
+  fastify.patch<{
+    Params: { id: string };
+    Body: { patientName?: string; diagnosis?: string; notes?: string };
+  }>("/api/cases/:id", updateCase);
 
   // Delete a case
   fastify.delete<{ Params: { id: string } }>(
@@ -136,7 +163,7 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
       if (existing.driveFolderId && request.user.googleToken) {
         try {
           const tokens = JSON.parse(decrypt(request.user.googleToken));
-          const driveService = new GoogleDriveService(tokens.access_token);
+          const driveService = new GoogleDriveService(tokens);
           await driveService.deleteFile(existing.driveFolderId);
         } catch (err) {
           fastify.log.warn(

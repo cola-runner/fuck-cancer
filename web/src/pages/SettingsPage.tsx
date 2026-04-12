@@ -9,6 +9,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const [provider, setProvider] = useState<LLMProvider>('gemini');
   const [apiKey, setApiKey] = useState('');
+  const [hasSavedApiKey, setHasSavedApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -22,7 +23,7 @@ export default function SettingsPage() {
     try {
       const { data } = await api.get('/settings');
       if (data.provider) setProvider(data.provider);
-      if (data.apiKey) setApiKey(data.apiKey);
+      setHasSavedApiKey(!!data.hasApiKey);
     } catch (err) {
       console.error('Failed to load settings:', err);
     } finally {
@@ -40,6 +41,8 @@ export default function SettingsPage() {
     setSaved(false);
     try {
       await api.put('/settings', { provider, apiKey });
+      setApiKey('');
+      setHasSavedApiKey(true);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -237,6 +240,11 @@ export default function SettingsPage() {
               {providers.find((p) => p.value === provider)?.label} API Key
               以启用 AI 功能
             </p>
+            {hasSavedApiKey && (
+              <p style={{ fontSize: '13px', color: '#64748d' }} className="mb-3">
+                当前已保存 API Key。输入新的值将覆盖旧配置。
+              </p>
+            )}
             <input
               type="password"
               value={apiKey}

@@ -3,15 +3,17 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { config } from "../lib/config.js";
 
-const dbPath = process.env.DATABASE_PATH || "./data/fuckcancer.db";
+const dbPath = config.databasePath;
 mkdirSync(dirname(dbPath), { recursive: true });
 
 const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 
-// Auto-create tables on first run
+// Auto-create tables on first run so a fresh self-hosted install can boot
+// before optional migration tooling is introduced.
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -46,6 +48,10 @@ sqlite.exec(`
     ocr_text TEXT,
     ai_summary TEXT,
     ai_metadata TEXT,
+    analysis_status TEXT NOT NULL DEFAULT 'not_requested',
+    analysis_error TEXT,
+    analysis_started_at INTEGER,
+    analysis_completed_at INTEGER,
     created_at INTEGER
   );
 
@@ -63,5 +69,21 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_conversations_case_id ON conversations(case_id);
   CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
 `);
+
+function ensureColumn(table: string, definition: string): void {
+  try {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("duplicate column name")) {
+      throw error;
+    }
+  }
+}
+
+ensureColumn("documents", "analysis_status TEXT NOT NULL DEFAULT 'not_requested'");
+ensureColumn("documents", "analysis_error TEXT");
+ensureColumn("documents", "analysis_started_at INTEGER");
+ensureColumn("documents", "analysis_completed_at INTEGER");
 
 export const db = drizzle(sqlite, { schema });

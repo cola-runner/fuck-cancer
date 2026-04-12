@@ -17,31 +17,59 @@ export default function UploadModal({
   const [activeTab, setActiveTab] = useState<UploadTab>('file');
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [error, setError] = useState('');
   const [textContent, setTextContent] = useState('');
   const [textTitle, setTextTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  const getErrorMessage = (err: unknown) => {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'response' in err &&
+      typeof (err as { response?: unknown }).response === 'object'
+    ) {
+      const response = (err as { response?: { data?: { error?: string } } }).response;
+      if (response?.data?.error) {
+        return response.data.error;
+      }
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return '上传失败，请重试';
+  };
+
   const handleFiles = async (files: FileList | File[]) => {
     if (files.length === 0) return;
     setUploading(true);
+    setError('');
+    const fileList = Array.from(files);
     try {
-      const formData = new FormData();
-      Array.from(files).forEach((file) => formData.append('files', file));
-      await api.post(`/cases/${caseId}/documents/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      for (let index = 0; index < fileList.length; index += 1) {
+        const formData = new FormData();
+        formData.append('file', fileList[index]);
+        setUploadProgress(`上传中 ${index + 1}/${fileList.length}`);
+        await api.post(`/cases/${caseId}/documents/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
       onUploadComplete();
     } catch (err) {
       console.error('Upload failed:', err);
+      setError(getErrorMessage(err));
     } finally {
       setUploading(false);
+      setUploadProgress('');
     }
   };
 
   const handleTextSubmit = async () => {
     if (!textContent.trim()) return;
     setUploading(true);
+    setError('');
     try {
       await api.post(`/cases/${caseId}/documents/text`, {
         title: textTitle.trim() || '文本记录',
@@ -50,6 +78,7 @@ export default function UploadModal({
       onUploadComplete();
     } catch (err) {
       console.error('Text submit failed:', err);
+      setError(getErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -252,8 +281,14 @@ export default function UploadModal({
           {uploading && activeTab !== 'text' && (
             <div className="mt-5 text-center">
               <div className="w-8 h-8 mx-auto mb-3 border-[3px] border-[#0071e3] border-t-transparent rounded-full animate-spin" />
-              <p className="text-[15px] text-[#86868b]">上传中...</p>
+              <p className="text-[15px] text-[#86868b]">{uploadProgress || '上传中...'}</p>
             </div>
+          )}
+
+          {error && (
+            <p className="mt-4 text-center" style={{ fontSize: '14px', color: '#b91c1c' }}>
+              {error}
+            </p>
           )}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { config } from "./config.js";
 
 interface TokenPayload {
   userId: string;
@@ -6,11 +7,7 @@ interface TokenPayload {
 }
 
 function getSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET environment variable is required");
-  }
-  return secret;
+  return config.jwtSecret;
 }
 
 export function signToken(payload: TokenPayload): string {

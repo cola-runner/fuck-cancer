@@ -6,3 +6,7 @@ dist/
 .DS_Store
 server/dist/
 web/dist/
+server/data/
+server/.wrangler/
+server/migrations/
+server/wrangler.toml

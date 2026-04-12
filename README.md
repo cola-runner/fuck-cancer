@@ -24,6 +24,7 @@ Medical data is sensitive. This app stores **zero medical files on its own serve
 | Database | SQLite (single file, zero setup) |
 | Storage | User's Google Drive |
 | AI | Bring your own key — Gemini / Claude / OpenAI |
+| Packaging | Docker Compose first, local npm dev second |
 | Medical APIs | RxNorm, OpenFDA, DailyMed, NIH Clinical Tables, PubMed |
 
 ## Getting started
@@ -50,17 +51,16 @@ Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 
    - **Google Drive API**
    - **Google People API**
 3. Create an **OAuth 2.0 Client ID** (Web application type)
-4. Add authorized redirect URI: `http://localhost:5173/auth/callback`
+4. Add authorized redirect URI: `http://localhost:3000/api/auth/google/callback`
 5. Copy the Client ID and Client Secret
 
 ### 3. Configure
 
 ```bash
-cd server
-cp .env.example .env
+cp server/.env.example server/.env
 ```
 
-Edit `server/.env`:
+Edit `server/.env` and fill in the secrets:
 
 ```env
 DATABASE_PATH=./data/fuckcancer.db
@@ -70,26 +70,37 @@ ENCRYPTION_KEY=    # generate: node -e "console.log(require('crypto').randomByte
 
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+
+APP_ORIGIN=http://localhost:5173
+CORS_ORIGIN=http://localhost:5173
 ```
 
 ### 4. Install and run
 
-**Backend:**
+**Recommended: Docker Compose**
+
+```bash
+docker compose up --build
+```
+
+This starts:
+
+- Web app at `http://localhost:5173`
+- API at `http://localhost:3000`
+- SQLite database persisted in `server/data/`
+
+**Local development without Docker**
 
 ```bash
 cd server
 npm install
 npm run dev
-# Running at http://localhost:3000
-```
 
-**Frontend (new terminal):**
-
-```bash
+# In a second terminal
 cd web
 npm install
 npm run dev
-# Running at http://localhost:5173
 ```
 
 Open **http://localhost:5173** and sign in with Google.
@@ -129,10 +140,10 @@ This is currently the most accurate approach for multi-speaker medical audio.
 
 ## Privacy
 
-- Medical files (images, PDFs, audio) → stored only in **your Google Drive**
-- Database → local SQLite file on **your machine**
-- AI analysis → your API key calls the LLM directly
-- This server never sees your medical data in transit
+- Medical files (images, PDFs, audio) are stored in **your Google Drive**
+- The app database lives in a local SQLite file on **your machine**
+- AI analysis uses **your own API key** and calls your chosen provider directly from your self-hosted server
+- The server does process uploads and chat context in order to send them to Google Drive and AI providers, so treat the host machine as trusted infrastructure
 
 ## Project structure
 
@@ -144,13 +155,14 @@ fuck-cancer/
 │   │   ├── skills/         # Medical API integrations (RxNorm, FDA, etc.)
 │   │   ├── lib/            # Google Drive, LLM providers, encryption
 │   │   └── db/             # SQLite schema + connection
+│   ├── data/              # Local SQLite database files (gitignored)
 │   └── Dockerfile
 ├── web/                    # React frontend
 │   ├── src/
 │   │   ├── pages/          # Login, Cases, CaseDetail, Chat, Settings
 │   │   └── components/     # Layout, DocumentCard, UploadModal
 │   └── Dockerfile
-├── docker-compose.yml      # Optional: Docker deployment
+├── docker-compose.yml      # Primary self-hosted deployment path
 └── DESIGN.md               # Product design document
 ```
 

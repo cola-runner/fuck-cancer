@@ -52,6 +52,12 @@ export const documents = sqliteTable("documents", {
   ocrText: text("ocr_text"),
   aiSummary: text("ai_summary"),
   aiMetadata: text("ai_metadata", { mode: "json" }),
+  analysisStatus: text("analysis_status")
+    .notNull()
+    .$defaultFn(() => "not_requested"),
+  analysisError: text("analysis_error"),
+  analysisStartedAt: integer("analysis_started_at", { mode: "timestamp" }),
+  analysisCompletedAt: integer("analysis_completed_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
     () => new Date()
   ),

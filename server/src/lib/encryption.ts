@@ -1,16 +1,13 @@
 import crypto from "node:crypto";
+import { config } from "./config.js";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
 function getEncryptionKey(): Buffer {
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error("ENCRYPTION_KEY environment variable is required");
-  }
   // Derive a 32-byte key from the provided secret
-  return crypto.scryptSync(key, "fuck-cancer-salt", 32);
+  return crypto.scryptSync(config.encryptionKey, "fuck-cancer-salt", 32);
 }
 
 export function encrypt(plaintext: string): string {

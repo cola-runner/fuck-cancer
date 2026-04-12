@@ -32,10 +32,10 @@ export default function ChatPage() {
     try {
       const [chatRes, settingsRes] = await Promise.all([
         api.get(`/cases/${id}/chat`),
-        api.get('/settings').catch(() => ({ data: { apiKey: null } })),
+        api.get('/settings').catch(() => ({ data: { hasApiKey: false } })),
       ]);
       setMessages(chatRes.data.messages || []);
-      setHasApiKey(!!settingsRes.data.apiKey);
+      setHasApiKey(!!settingsRes.data.hasApiKey);
     } catch (err) {
       console.error('Failed to load chat:', err);
     } finally {

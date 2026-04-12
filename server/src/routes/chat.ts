@@ -191,4 +191,29 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({ conversations: history });
     }
   );
+
+  fastify.get<{ Params: { id: string } }>(
+    "/api/cases/:id/chat",
+    async (request, reply) => {
+      const { id: caseId } = request.params;
+
+      const [caseRecord] = await db
+        .select()
+        .from(cases)
+        .where(and(eq(cases.id, caseId), eq(cases.userId, request.user.id)))
+        .limit(1);
+
+      if (!caseRecord) {
+        return reply.code(404).send({ error: "Case not found" });
+      }
+
+      const history = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.caseId, caseId))
+        .orderBy(conversations.createdAt);
+
+      return reply.send({ messages: history });
+    }
+  );
 }

@@ -3,24 +3,59 @@ import type { Document } from '../pages/CaseDetailPage';
 
 interface DocumentCardProps {
   document: Document;
+  onRetry?: (documentId: string) => void;
+  retrying?: boolean;
 }
 
-// Category left-border colors per Stripe design spec
-const categoryBorderColor: Record<string, string> = {
-  // blood test / lab
-  检查报告: '#ea2261',
-  // imaging
-  影像资料: '#059669',
-  // prescription / medication
-  处方: '#15be53',
-  // pathology / note / recording
-  病理: '#f59e0b',
-  // other
-  其他: '#e5edf5',
+const categoryMeta: Record<string, { label: string; color: string }> = {
+  lab_report: { label: '检查报告', color: '#ea2261' },
+  imaging: { label: '影像资料', color: '#059669' },
+  prescription: { label: '处方', color: '#15be53' },
+  pathology: { label: '病理', color: '#f59e0b' },
+  clinical_notes: { label: '临床记录', color: '#c2410c' },
+  insurance: { label: '保险资料', color: '#64748d' },
+  other: { label: '其他', color: '#e5edf5' },
 };
 
-function getCategoryBorderColor(category: string): string {
-  return categoryBorderColor[category] ?? '#e5edf5';
+const analysisStatusMeta: Record<
+  Document['analysisStatus'],
+  { label: string; color: string; background: string }
+> = {
+  not_requested: {
+    label: '未自动分析',
+    color: '#64748d',
+    background: 'rgba(100,116,141,0.12)',
+  },
+  queued: {
+    label: '待分析',
+    color: '#1d4ed8',
+    background: 'rgba(29,78,216,0.12)',
+  },
+  processing: {
+    label: '分析中',
+    color: '#0f766e',
+    background: 'rgba(15,118,110,0.12)',
+  },
+  completed: {
+    label: '已完成',
+    color: '#15803d',
+    background: 'rgba(21,128,61,0.12)',
+  },
+  failed: {
+    label: '分析失败',
+    color: '#b91c1c',
+    background: 'rgba(185,28,28,0.12)',
+  },
+};
+
+function getCategoryMeta(category?: string | null) {
+  if (!category) {
+    return categoryMeta.other;
+  }
+  return categoryMeta[category] ?? {
+    label: category,
+    color: '#64748d',
+  };
 }
 
 const fileTypeIcons: Record<string, React.ReactNode> = {
@@ -60,12 +95,33 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default function DocumentCard({ document: doc }: DocumentCardProps) {
-  const leftBorderColor = getCategoryBorderColor(doc.category);
+function summarizeFallback(content?: string | null) {
+  if (!content) return null;
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
+}
+
+export default function DocumentCard({
+  document: doc,
+  onRetry,
+  retrying = false,
+}: DocumentCardProps) {
+  const category = getCategoryMeta(doc.category);
+  const statusMeta = analysisStatusMeta[doc.analysisStatus];
+  const leftBorderColor = category.color;
+  const displayName = doc.fileName || '未命名资料';
+  const displayDate = doc.docDate || doc.createdAt;
+  const summary = doc.aiSummary || summarizeFallback(doc.ocrText);
+  const canRetry =
+    !!onRetry &&
+    (doc.analysisStatus === 'failed' || doc.analysisStatus === 'not_requested') &&
+    !!doc.fileType &&
+    doc.fileType !== 'text/plain';
 
   return (
     <div
-      className="flex overflow-hidden cursor-pointer group transition-all duration-200"
+      className="flex overflow-hidden group transition-all duration-200"
       style={{
         backgroundColor: '#ffffff',
         border: '1px solid #e5edf5',
@@ -92,21 +148,12 @@ export default function DocumentCard({ document: doc }: DocumentCardProps) {
       <div className="flex gap-4 flex-1 p-4">
         {/* Thumbnail / Icon */}
         <div className="flex-shrink-0">
-          {doc.thumbnailUrl ? (
-            <img
-              src={doc.thumbnailUrl}
-              alt=""
-              className="w-12 h-12 object-cover"
-              style={{ borderRadius: '6px', backgroundColor: '#f8fafc' }}
-            />
-          ) : (
-            <div
-              className="w-12 h-12 flex items-center justify-center"
-              style={{ backgroundColor: '#f8fafc', borderRadius: '6px' }}
-            >
-              {getFileIcon(doc.mimeType, doc.filename)}
-            </div>
-          )}
+          <div
+            className="w-12 h-12 flex items-center justify-center"
+            style={{ backgroundColor: '#f8fafc', borderRadius: '6px' }}
+          >
+            {getFileIcon(doc.fileType ?? undefined, doc.fileName ?? undefined)}
+          </div>
         </div>
 
         {/* Info */}
@@ -116,40 +163,77 @@ export default function DocumentCard({ document: doc }: DocumentCardProps) {
               className="truncate transition-colors"
               style={{ fontSize: '15px', fontWeight: 500, color: '#061b31' }}
             >
-              {doc.filename}
+              {displayName}
             </h4>
             <span
-              className="flex-shrink-0 text-right"
-              style={{ fontSize: '12px', color: '#64748d' }}
+              className="flex-shrink-0"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                color: statusMeta.color,
+                backgroundColor: statusMeta.background,
+                borderRadius: '999px',
+                padding: '4px 10px',
+              }}
             >
-              {formatDate(doc.date)}
+              {statusMeta.label}
             </span>
           </div>
-          {doc.summary && (
+          {summary && (
             <p
               className="mt-1 line-clamp-2"
               style={{ fontSize: '13px', color: '#64748d', lineHeight: 1.5 }}
             >
-              {doc.summary}
+              {summary}
             </p>
           )}
-          {doc.category && (
+          {!summary && doc.analysisError && (
+            <p
+              className="mt-1 line-clamp-2"
+              style={{ fontSize: '13px', color: '#7c2d12', lineHeight: 1.5 }}
+            >
+              {doc.analysisError}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span
-              className="inline-block mt-2"
+              className="inline-block"
               style={{
                 fontSize: '11px',
                 fontWeight: 500,
                 color: leftBorderColor === '#e5edf5' ? '#64748d' : leftBorderColor,
-                backgroundColor: leftBorderColor === '#e5edf5'
-                  ? 'rgba(100,116,141,0.08)'
-                  : `${leftBorderColor}14`,
+                backgroundColor:
+                  leftBorderColor === '#e5edf5'
+                    ? 'rgba(100,116,141,0.08)'
+                    : `${leftBorderColor}14`,
                 borderRadius: '4px',
                 padding: '2px 8px',
               }}
             >
-              {doc.category}
+              {category.label}
             </span>
-          )}
+            <span style={{ fontSize: '12px', color: '#64748d' }}>
+              {formatDate(displayDate)}
+            </span>
+            {canRetry && (
+              <button
+                type="button"
+                disabled={retrying}
+                className="cursor-pointer transition-colors"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: retrying ? '#94a3b8' : '#059669',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                }}
+                onClick={() => onRetry(doc.id)}
+              >
+                {retrying ? '重新分析中...' : '重新分析'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

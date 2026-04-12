@@ -16,13 +16,15 @@ interface CaseDetail {
 
 export interface Document {
   id: string;
-  filename: string;
-  category: string;
-  date: string;
-  summary?: string;
-  thumbnailUrl?: string;
-  fileUrl?: string;
-  mimeType?: string;
+  fileName: string | null;
+  fileType: string | null;
+  category: string | null;
+  docDate: string | null;
+  ocrText: string | null;
+  aiSummary: string | null;
+  analysisStatus: 'not_requested' | 'queued' | 'processing' | 'completed' | 'failed';
+  analysisError: string | null;
+  createdAt: string;
 }
 
 export default function CaseDetailPage() {
@@ -34,12 +36,31 @@ export default function CaseDetailPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ patientName: '', diagnosis: '' });
+  const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCase();
   }, [id]);
 
-  const loadCase = async () => {
+  useEffect(() => {
+    if (!id) return;
+    const hasActiveAnalysis = documents.some((doc) =>
+      doc.analysisStatus === 'queued' || doc.analysisStatus === 'processing'
+    );
+
+    if (!hasActiveAnalysis) return;
+
+    const timer = window.setTimeout(() => {
+      loadCase({ silent: true });
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [documents, id]);
+
+  const loadCase = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     try {
       const [caseRes, docsRes] = await Promise.all([
         api.get(`/cases/${id}`),
@@ -49,12 +70,14 @@ export default function CaseDetailPage() {
       setDocuments(docsRes.data.documents || []);
       setEditForm({
         patientName: caseRes.data.case.patientName,
-        diagnosis: caseRes.data.case.diagnosis,
+        diagnosis: caseRes.data.case.diagnosis || '',
       });
     } catch (err) {
       console.error('Failed to load case:', err);
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -70,7 +93,24 @@ export default function CaseDetailPage() {
 
   const handleUploadComplete = () => {
     setShowUpload(false);
-    loadCase();
+    loadCase({ silent: true });
+  };
+
+  const handleRetryAnalysis = async (documentId: string) => {
+    setRetryingDocId(documentId);
+    try {
+      const { data } = await api.post(`/documents/${documentId}/reanalyze`);
+      if (data.document) {
+        setDocuments((prev) =>
+          prev.map((doc) => (doc.id === documentId ? data.document : doc))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to reanalyze document:', err);
+      await loadCase({ silent: true });
+    } finally {
+      setRetryingDocId(null);
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -216,8 +256,8 @@ export default function CaseDetailPage() {
                 />
               </div>
               <div className="flex gap-3 pt-1">
-                <button
-                  onClick={() => setEditing(false)}
+              <button
+                onClick={() => setEditing(false)}
                   className="cursor-pointer transition-colors"
                   style={{
                     height: '36px',
@@ -373,10 +413,19 @@ export default function CaseDetailPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {documents
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            {[...documents]
+              .sort(
+                (a, b) =>
+                  new Date(b.docDate || b.createdAt).getTime() -
+                  new Date(a.docDate || a.createdAt).getTime()
+              )
               .map((doc) => (
-                <DocumentCard key={doc.id} document={doc} />
+                <DocumentCard
+                  key={doc.id}
+                  document={doc}
+                  onRetry={handleRetryAnalysis}
+                  retrying={retryingDocId === doc.id}
+                />
               ))}
           </div>
         )}
