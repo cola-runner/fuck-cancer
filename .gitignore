@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+server/dist/
+web/dist/
+server/data/
+server/.wrangler/
+server/migrations/
+server/wrangler.toml
+
+# Local agent tooling / third-party design skill (not part of the product)
+.claude/
+.playwright-mcp/
+
+# Design-skill metadata & rendered screenshots (keep prototype source only)
+designs/**/_d_meta.json
+designs/**/_screens/

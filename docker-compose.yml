@@ -1,0 +1,26 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    env_file:
+      - ./server/.env
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_PATH: /app/data/fuckcancer.db
+      NOTEBOOKLM_STORAGE_PATH: /app/notebooklm/storage_state.json
+    volumes:
+      - ./server/data:/app/data
+      # The NotebookLM session captured by `npx @cola_runner/notebooklm-cli login`
+      # on the host. Mounted read-write so the server can refresh rotating cookies.
+      - ${HOME}/.config/notebooklm-cli:/app/notebooklm
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
