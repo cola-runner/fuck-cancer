@@ -1,0 +1,231 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   陪伴 — 温暖治愈设计系统 (warm / healing design system)
+   Ported from designs/fuck-cancer-warm prototype.
+   ============================================================ */
+
+@theme {
+  /* warm neutrals */
+  --color-bg: #F4EEE6;
+  --color-canvas: #EFE7DC;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #FBF7F1;
+  --color-ink: #2D2823;
+  --color-ink-2: #7C7468;
+  --color-ink-3: #ABA294;
+  --color-line: #ECE3D7;
+  --color-line-2: #F3ECE2;
+  /* healing accents */
+  --color-sage: #5E9081;
+  --color-sage-strong: #4C7A6B;
+  --color-sage-tint: #E5EFEA;
+  --color-sage-tint-2: #EFF5F2;
+  --color-coral: #E68A6F;
+  --color-coral-strong: #D7745A;
+  --color-coral-tint: #FAE8E0;
+  --color-official: #5C7E9B;
+  --color-official-tint: #E8F0F6;
+  --color-amber: #BF8C3E;
+  --color-amber-tint: #F5EAD4;
+  --color-clay: #C0644B;
+  --color-clay-tint: #F6E1D9;
+
+  --font-sans: -apple-system, "SF Pro Text", BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-display: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+:root {
+  --bg: #F4EEE6;
+  --canvas: #EFE7DC;
+  --surface: #FFFFFF;
+  --surface-2: #FBF7F1;
+  --ink: #2D2823;
+  --ink-2: #7C7468;
+  --ink-3: #ABA294;
+  --line: #ECE3D7;
+  --line-2: #F3ECE2;
+  --sage: #5E9081;
+  --sage-strong: #4C7A6B;
+  --sage-tint: #E5EFEA;
+  --sage-tint-2: #EFF5F2;
+  --coral: #E68A6F;
+  --coral-strong: #D7745A;
+  --coral-tint: #FAE8E0;
+  --official: #5C7E9B;
+  --official-tint: #E8F0F6;
+  --amber: #BF8C3E;
+  --amber-tint: #F5EAD4;
+  --clay: #C0644B;
+  --clay-tint: #F6E1D9;
+
+  --shadow-sm: 0 1px 2px rgba(64, 50, 36, .06);
+  --shadow-md: 0 8px 24px rgba(64, 50, 36, .09);
+  --shadow-lg: 0 20px 48px rgba(64, 50, 36, .14);
+  --shadow-coral: 0 10px 26px rgba(214, 116, 90, .32);
+  --shadow-sage: 0 10px 26px rgba(76, 122, 107, .30);
+
+  --r-xl: 26px;
+  --r-lg: 22px;
+  --r-md: 16px;
+  --r-sm: 11px;
+
+  --font-display: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(1200px 600px at 50% -8%, #FBF4EA 0%, rgba(251, 244, 234, 0) 58%),
+    var(--canvas);
+  color: var(--ink);
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+#root { min-height: 100dvh; display: flex; flex-direction: column; }
+
+[lang="zh"], .zh { line-height: 1.78; }
+
+::selection { background-color: rgba(94, 144, 129, .22); }
+
+input, textarea, select, button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(124, 116, 104, .22); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(124, 116, 104, .38); }
+
+/* ---------------- primitives ---------------- */
+
+.fc-display { font-family: var(--font-display); font-weight: 600; letter-spacing: -.3px; }
+.fc-muted { color: var(--ink-2); }
+.fc-faint { color: var(--ink-3); }
+
+.fc-card {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line-2);
+}
+
+.fc-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; line-height: 1; white-space: nowrap;
+}
+.fc-chip-sage { background: var(--sage-tint); color: var(--sage-strong); }
+.fc-chip-official { background: var(--official-tint); color: var(--official); }
+.fc-chip-amber { background: var(--amber-tint); color: var(--amber); }
+.fc-chip-clay { background: var(--clay-tint); color: var(--clay); }
+.fc-chip-coral { background: var(--coral-tint); color: var(--coral-strong); }
+
+.fc-btn {
+  border: none; cursor: pointer; border-radius: 999px;
+  font-weight: 600; font-size: 15.5px; font-family: var(--font-sans);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: transform .14s ease, box-shadow .2s ease, background .2s ease, color .15s ease;
+}
+.fc-btn:active { transform: translateY(1px) scale(.99); }
+.fc-btn:disabled { opacity: .55; cursor: default; }
+.fc-btn-primary { background: var(--sage); color: #fff; box-shadow: var(--shadow-sage); height: 52px; padding: 0 22px; }
+.fc-btn-primary:not(:disabled):hover { background: var(--sage-strong); }
+.fc-btn-coral { background: var(--coral); color: #fff; box-shadow: var(--shadow-coral); height: 52px; padding: 0 22px; }
+.fc-btn-coral:not(:disabled):hover { background: var(--coral-strong); }
+.fc-btn-ghost { background: var(--surface); color: var(--sage-strong); box-shadow: var(--shadow-sm); height: 46px; padding: 0 18px; }
+.fc-btn-ghost:not(:disabled):hover { background: var(--surface-2); }
+
+.fc-iconbtn {
+  width: 40px; height: 40px; border: none; border-radius: 50%;
+  background: var(--surface); color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: var(--shadow-sm); flex-shrink: 0;
+  transition: transform .15s ease, background .15s ease, color .15s ease;
+}
+.fc-iconbtn:hover { background: var(--surface-2); }
+.fc-iconbtn:active { transform: scale(.93); }
+
+.fc-tile {
+  width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.fc-input {
+  width: 100%; border: 1px solid var(--line); background: var(--surface);
+  border-radius: var(--r-sm); height: 48px; padding: 0 15px;
+  font-size: 15.5px; color: var(--ink); outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.fc-input::placeholder { color: var(--ink-3); }
+.fc-input:focus { border-color: var(--sage); box-shadow: 0 0 0 3px rgba(94, 144, 129, .15); }
+textarea.fc-input { height: auto; padding: 12px 15px; resize: none; line-height: 1.7; }
+
+.fc-label {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2); margin-bottom: 8px; letter-spacing: .2px;
+}
+
+.fc-fab {
+  position: fixed; right: max(20px, calc(50% - 226px + 20px)); bottom: 24px;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: var(--coral); color: #fff; border: none; cursor: pointer;
+  box-shadow: var(--shadow-coral);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .16s ease; z-index: 40;
+}
+.fc-fab:active { transform: scale(.92) rotate(90deg); }
+
+/* chat */
+.fc-bubble-user {
+  background: var(--sage); color: #fff;
+  padding: 13px 16px; border-radius: 20px 20px 6px 20px;
+  max-width: 82%; align-self: flex-end; font-size: 15.5px; line-height: 1.6;
+  box-shadow: var(--shadow-sage);
+}
+.fc-answer {
+  background: var(--surface); border: 1px solid var(--line-2);
+  border-radius: 6px 20px 20px 20px; padding: 18px;
+  box-shadow: var(--shadow-sm); align-self: flex-start; max-width: 94%;
+}
+.fc-cite {
+  display: flex; gap: 11px; padding: 12px 13px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 14px; cursor: pointer; text-align: left; width: 100%;
+  text-decoration: none; color: inherit;
+  transition: border-color .15s ease, transform .14s ease, box-shadow .2s ease;
+}
+.fc-cite:hover { border-color: var(--official); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.fc-cite-num {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 7px;
+  background: var(--official); color: #fff; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.fc-qchip {
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); border-radius: 999px; padding: 9px 15px;
+  font-size: 13.5px; cursor: pointer; white-space: nowrap;
+  transition: background .15s ease, border-color .15s ease;
+}
+.fc-qchip:hover { background: var(--sage-tint-2); border-color: var(--sage); }
+
+/* animations */
+@keyframes fc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.fc-rise { animation: fc-rise .42s cubic-bezier(.2, .7, .3, 1) both; }
+@keyframes fc-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+.fc-pulse { animation: fc-pulse 1.4s ease-in-out infinite; }
+@keyframes fc-spin { to { transform: rotate(360deg); } }
+.fc-spin { animation: fc-spin .8s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fc-rise, .fc-pulse, .fc-spin { animation: none; }
+}
