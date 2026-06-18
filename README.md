@@ -4,10 +4,13 @@
 
 Cancer treatment isn't a single visit — it's months or years of reports, prescriptions, imaging, lab results, and doctor conversations scattered across hospitals, apps, and photo albums. This tool brings it all together and lets you ask questions about it in plain language.
 
+> ⚠️ **Not medical advice.** This is an organizing and reference tool. Its answers can be wrong or incomplete and must never replace a qualified doctor. Always confirm anything important with your healthcare provider before acting on it.
+
 ## What it does
 
 - **Collect** — Upload medical reports, prescriptions, images, and even raw visit-recording audio. Everything becomes a source in a private [NotebookLM](https://notebooklm.google.com) notebook, one per patient.
 - **Understand** — NotebookLM reads every source natively — PDFs, photos of reports, audio recordings — no manual transcription or OCR step.
+- **Cover drugs automatically** — when you add a document, the app reads the drug names out of it and automatically pulls in the matching **official FDA / DailyMed leaflets** (from a whitelist of authoritative medical sites) as sources. So when you later ask about a medication, answers are grounded in the real label — dosing, interactions, black-box warnings — instead of a guess.
 - **Ask** — Chat with an AI that has the full context of the patient's notebook. Ask about trends, what a result means, how things have changed over time.
 - **Research** — Search the web from inside a case (powered by NotebookLM's own research model — drug leaflets, guidelines, patient resources) and import the pages you pick as sources, so answers can cite them too. A deep-research mode writes a full report into the notebook.
 - **Cite** — Every answer is grounded in the patient's own documents and comes back with citations to the exact source passages it used.
@@ -145,8 +148,9 @@ No separate transcription step needed.
 fuck-cancer/
 ├── server/                 # Node.js + Fastify API
 │   ├── src/
-│   │   ├── routes/         # auth, cases, documents, chat, settings
-│   │   ├── lib/            # notebooklm (client singleton), auth, encryption
+│   │   ├── routes/         # auth, cases, documents, chat, research, settings
+│   │   ├── lib/            # notebooklm (self-healing client), drug-coverage,
+│   │   │                   #   source-tracking, auth, encryption
 │   │   └── db/             # SQLite schema + connection
 │   ├── data/              # Local SQLite database files (gitignored)
 │   └── Dockerfile
