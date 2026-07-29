@@ -5,11 +5,30 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth.js";
 import {
   withNotebookLM,
-  isAuthError,
-  NOTEBOOKLM_AUTH_HINT,
 } from "../lib/notebooklm.js";
+import {
+  toNotebookLMError,
+  toRemoteDeleteError,
+} from "../lib/api-errors.js";
 
-export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
+export interface CasesRoutesOptions {
+  createNotebook?: (title: string) => Promise<{ id: string }>;
+  deleteNotebook?: (notebookId: string) => Promise<boolean>;
+}
+
+export async function casesRoutes(
+  fastify: FastifyInstance,
+  options: CasesRoutesOptions = {}
+): Promise<void> {
+  const createNotebook =
+    options.createNotebook ??
+    ((title: string) =>
+      withNotebookLM((client) => client.notebooks.create(title)));
+  const deleteNotebook =
+    options.deleteNotebook ??
+    ((notebookId: string) =>
+      withNotebookLM((client) => client.notebooks.delete(notebookId)));
+
   // All case routes require authentication
   fastify.addHook("preHandler", authMiddleware);
 
@@ -70,19 +89,12 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
     // so create it up front and fail loudly if NotebookLM is unreachable.
     let notebookId: string;
     try {
-      const notebook = await withNotebookLM((client) =>
-        client.notebooks.create(`FuckCancer - ${patientName}`)
-      );
+      const notebook = await createNotebook(`FuckCancer - ${patientName}`);
       notebookId = notebook.id;
     } catch (err) {
-      if (isAuthError(err)) {
-        return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-      }
-      const message = err instanceof Error ? err.message : "Unknown error";
       fastify.log.error({ err }, "Failed to create NotebookLM notebook");
-      return reply
-        .code(502)
-        .send({ error: `Failed to create NotebookLM notebook: ${message}` });
+      const mapped = toNotebookLMError(err);
+      return reply.code(mapped.statusCode).send(mapped.body);
     }
 
     const [newCase] = await db
@@ -176,16 +188,20 @@ export async function casesRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: "Case not found" });
       }
 
-      // Best-effort: delete the backing notebook (and all its sources).
       if (existing.notebookId) {
-        const notebookId = existing.notebookId;
         try {
-          await withNotebookLM((client) => client.notebooks.delete(notebookId));
+          const deleted = await deleteNotebook(existing.notebookId);
+          if (!deleted) {
+            const mapped = toRemoteDeleteError();
+            return reply.code(mapped.statusCode).send(mapped.body);
+          }
         } catch (err) {
-          fastify.log.warn(
+          fastify.log.error(
             { err },
             "Failed to delete NotebookLM notebook for case"
           );
+          const mapped = toRemoteDeleteError(err);
+          return reply.code(mapped.statusCode).send(mapped.body);
         }
       }
 

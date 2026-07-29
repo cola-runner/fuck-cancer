@@ -90,7 +90,7 @@ export async function isNotebookLMConnected(): Promise<boolean> {
 }
 
 export const NOTEBOOKLM_AUTH_HINT =
-  "NotebookLM session is missing or expired. On the server host run `npx @cola_runner/notebooklm-cli login` (or `login --paste`) to refresh it.";
+  "NotebookLM session is missing or expired. On the server host rerun `npx @cola_runner/notebooklm-cli@0.1.4 login --paste --storage <NOTEBOOKLM_STORAGE_PATH>`.";
 
 // Appended to every research query (manual search and the auto drug-coverage
 // pipeline). The research model itself judges which authoritative sources fit

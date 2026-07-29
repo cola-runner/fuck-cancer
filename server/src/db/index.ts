@@ -4,11 +4,15 @@ import * as schema from "./schema.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { config } from "../lib/config.js";
+import { preparePrivateFile } from "../lib/file-security.js";
 
 const dbPath = config.databasePath;
+process.umask(0o077);
+preparePrivateFile(dbPath);
 mkdirSync(dirname(dbPath), { recursive: true });
 
 const sqlite = new Database(dbPath);
+preparePrivateFile(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 
@@ -51,6 +55,8 @@ sqlite.exec(`
     source_url TEXT,
     source_status TEXT NOT NULL DEFAULT 'processing',
     source_error TEXT,
+    coverage_status TEXT NOT NULL DEFAULT 'pending',
+    coverage_error TEXT,
     created_at INTEGER
   );
 
@@ -98,6 +104,8 @@ ensureColumn("documents", "source_url TEXT");
 ensureColumn("documents", "origin TEXT");
 ensureColumn("documents", "source_status TEXT NOT NULL DEFAULT 'processing'");
 ensureColumn("documents", "source_error TEXT");
+ensureColumn("documents", "coverage_status TEXT NOT NULL DEFAULT 'pending'");
+ensureColumn("documents", "coverage_error TEXT");
 ensureColumn("conversations", '"references" TEXT');
 
 export const db = drizzle(sqlite, { schema });

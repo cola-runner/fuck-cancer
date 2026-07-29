@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+
+.env*
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+data
+storage_state.json
+
+*.log
+.git
+.superpowers

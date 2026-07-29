@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 
 import { config } from "./lib/config.js";
+import { hardenRuntimePermissions } from "./lib/file-security.js";
 import { authRoutes } from "./routes/auth.js";
 import { casesRoutes } from "./routes/cases.js";
 import { documentsRoutes } from "./routes/documents.js";
@@ -22,13 +23,18 @@ const fastify = Fastify({
 });
 
 async function start(): Promise<void> {
+  hardenRuntimePermissions({
+    databasePath: config.databasePath,
+    notebooklmStoragePath: config.notebooklmStoragePath,
+  });
+
   // Register plugins
   await fastify.register(cors, {
     origin: config.corsOrigin,
     credentials: true,
   });
 
-  await fastify.register(cookie);
+  await fastify.register(cookie, { secret: config.jwtSecret });
 
   await fastify.register(multipart, {
     limits: {

@@ -9,7 +9,8 @@ export interface AppConfig {
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
-  /** Override for the NotebookLM cookie jar. Undefined → CLI default (~/.config/notebooklm-cli/storage_state.json). */
+  ownerEmail: string;
+  /** Dedicated NotebookLM cookie jar path. Undefined keeps the CLI default for local backwards compatibility. */
   notebooklmStoragePath?: string;
   appOrigin: string;
   corsOrigin: string;
@@ -20,10 +21,11 @@ export interface AppConfig {
 }
 
 function readRequiredEnv(
+  env: NodeJS.ProcessEnv,
   name: keyof NodeJS.ProcessEnv,
   errors: string[]
 ): string {
-  const value = process.env[name]?.trim();
+  const value = env[name]?.trim();
   if (!value) {
     errors.push(`Missing required environment variable: ${name}`);
     return "";
@@ -32,10 +34,11 @@ function readRequiredEnv(
 }
 
 function readOptionalEnv(
+  env: NodeJS.ProcessEnv,
   name: keyof NodeJS.ProcessEnv,
   fallback: string
 ): string {
-  return process.env[name]?.trim() || fallback;
+  return env[name]?.trim() || fallback;
 }
 
 function readUrlEnv(name: keyof NodeJS.ProcessEnv, value: string, errors: string[]) {
@@ -49,8 +52,8 @@ function readUrlEnv(name: keyof NodeJS.ProcessEnv, value: string, errors: string
   }
 }
 
-function readPort(errors: string[]): number {
-  const raw = process.env.PORT?.trim() || "3000";
+function readPort(env: NodeJS.ProcessEnv, errors: string[]): number {
+  const raw = env.PORT?.trim() || "3000";
   const port = Number.parseInt(raw, 10);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     errors.push("PORT must be an integer between 1 and 65535");
@@ -59,30 +62,35 @@ function readPort(errors: string[]): number {
   return port;
 }
 
-function readLogLevel(): LogLevel {
-  const raw = process.env.LOG_LEVEL?.trim() || "info";
+function readLogLevel(env: NodeJS.ProcessEnv): LogLevel {
+  const raw = env.LOG_LEVEL?.trim() || "info";
   const allowed: LogLevel[] = ["fatal", "error", "warn", "info", "debug", "trace"];
   return allowed.includes(raw as LogLevel) ? (raw as LogLevel) : "info";
 }
 
-function loadConfig(): AppConfig {
+export function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const errors: string[] = [];
 
-  const jwtSecret = readRequiredEnv("JWT_SECRET", errors);
-  const encryptionKey = readRequiredEnv("ENCRYPTION_KEY", errors);
-  const googleClientId = readRequiredEnv("GOOGLE_CLIENT_ID", errors);
-  const googleClientSecret = readRequiredEnv("GOOGLE_CLIENT_SECRET", errors);
-  const googleRedirectUri = readRequiredEnv("GOOGLE_REDIRECT_URI", errors);
+  const jwtSecret = readRequiredEnv(env, "JWT_SECRET", errors);
+  const encryptionKey = readRequiredEnv(env, "ENCRYPTION_KEY", errors);
+  const googleClientId = readRequiredEnv(env, "GOOGLE_CLIENT_ID", errors);
+  const googleClientSecret = readRequiredEnv(env, "GOOGLE_CLIENT_SECRET", errors);
+  const googleRedirectUri = readRequiredEnv(env, "GOOGLE_REDIRECT_URI", errors);
+  const ownerEmail = normalizeEmail(readRequiredEnv(env, "OWNER_EMAIL", errors));
 
   const notebooklmStoragePath =
-    process.env.NOTEBOOKLM_STORAGE_PATH?.trim() || undefined;
-  const appOrigin = readOptionalEnv("APP_ORIGIN", "http://localhost:5173");
-  const corsOrigin = readOptionalEnv("CORS_ORIGIN", appOrigin);
-  const databasePath = readOptionalEnv("DATABASE_PATH", "./data/fuckcancer.db");
-  const host = readOptionalEnv("HOST", "0.0.0.0");
-  const port = readPort(errors);
-  const logLevel = readLogLevel();
-  const nodeEnv = readOptionalEnv("NODE_ENV", "development");
+    env.NOTEBOOKLM_STORAGE_PATH?.trim() || undefined;
+  const appOrigin = readOptionalEnv(env, "APP_ORIGIN", "http://localhost:5173");
+  const corsOrigin = readOptionalEnv(env, "CORS_ORIGIN", appOrigin);
+  const databasePath = readOptionalEnv(env, "DATABASE_PATH", "./data/fuckcancer.db");
+  const host = readOptionalEnv(env, "HOST", "0.0.0.0");
+  const port = readPort(env, errors);
+  const logLevel = readLogLevel(env);
+  const nodeEnv = readOptionalEnv(env, "NODE_ENV", "development");
 
   readUrlEnv("GOOGLE_REDIRECT_URI", googleRedirectUri, errors);
   readUrlEnv("APP_ORIGIN", appOrigin, errors);
@@ -105,6 +113,7 @@ function loadConfig(): AppConfig {
     googleClientId,
     googleClientSecret,
     googleRedirectUri,
+    ownerEmail,
     notebooklmStoragePath,
     appOrigin,
     corsOrigin,

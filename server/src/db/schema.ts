@@ -68,6 +68,14 @@ export const documents = sqliteTable("documents", {
     .notNull()
     .$defaultFn(() => "processing"),
   sourceError: text("source_error"),
+  // Drug-reference coverage for user-provided documents. Chat is blocked until
+  // extraction and any required automatic source imports finish successfully.
+  // Imported research/auto sources set this to 'ready' because they do not
+  // trigger another coverage pass.
+  coverageStatus: text("coverage_status")
+    .notNull()
+    .$defaultFn(() => "pending"),
+  coverageError: text("coverage_error"),
   // null = user upload/note; 'research' = picked in the search modal;
   // 'auto' = imported by the drug-coverage pipeline. Auto/research docs never
   // re-trigger the pipeline (prevents import cascades).

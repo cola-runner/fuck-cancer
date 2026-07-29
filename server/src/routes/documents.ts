@@ -15,11 +15,14 @@ import { cases, documents } from "../db/schema.js";
 import { authMiddleware } from "../middleware/auth.js";
 import {
   withNotebookLM,
-  isAuthError,
-  NOTEBOOKLM_AUTH_HINT,
 } from "../lib/notebooklm.js";
 import { trackSourceProcessing } from "../lib/source-tracking.js";
 import { coverDrugsFromDocument } from "../lib/drug-coverage.js";
+import {
+  toNotebookLMError,
+  toRemoteDeleteError,
+} from "../lib/api-errors.js";
+import { classifySourceAuthority } from "../lib/source-authority.js";
 
 type UploadRequest = FastifyRequest<{ Params: { id: string } }> & {
   file: () => Promise<MultipartFile | undefined>;
@@ -40,26 +43,108 @@ async function findOwnedCase(caseId: string, userId: string) {
  * pipeline on it once ready (auto/research imports never re-enter here, so
  * imported leaflets can't cascade further imports).
  */
-function trackAndCover(
+export interface TrackAndCoverOptions {
+  trackSource?: typeof trackSourceProcessing;
+  coverDrugs?: typeof coverDrugsFromDocument;
+}
+
+export async function trackAndCover(
   docId: string,
   caseId: string,
   notebookId: string,
   sourceId: string,
-  logger: FastifyBaseLogger
-): void {
-  void trackSourceProcessing(docId, notebookId, sourceId, logger).then(
-    (ready) => {
-      if (ready) {
-        void coverDrugsFromDocument(docId, caseId, notebookId, sourceId, logger);
-      }
+  logger: FastifyBaseLogger,
+  options: TrackAndCoverOptions = {}
+): Promise<void> {
+  const trackSource = options.trackSource ?? trackSourceProcessing;
+  const coverDrugs = options.coverDrugs ?? coverDrugsFromDocument;
+
+  try {
+    await db
+      .update(documents)
+      .set({ coverageStatus: "pending", coverageError: null })
+      .where(eq(documents.id, docId));
+
+    const sourceReady = await trackSource(
+      docId,
+      notebookId,
+      sourceId,
+      logger
+    );
+    if (!sourceReady) {
+      await db
+        .update(documents)
+        .set({
+          coverageStatus: "error",
+          coverageError: "NotebookLM 资料处理失败，请重新检测或删除资料。",
+        })
+        .where(eq(documents.id, docId));
+      return;
     }
-  );
+
+    const covered = await coverDrugs(
+      docId,
+      caseId,
+      notebookId,
+      sourceId,
+      logger
+    );
+    await db
+      .update(documents)
+      .set(
+        covered
+          ? { coverageStatus: "ready", coverageError: null }
+          : {
+              coverageStatus: "error",
+              coverageError: "用药资料补充失败，请重新检测或删除资料。",
+            }
+      )
+      .where(eq(documents.id, docId));
+  } catch (err) {
+    logger.warn({ err, docId }, "Document coverage tracking failed");
+    await db
+      .update(documents)
+      .set({
+        coverageStatus: "error",
+        coverageError: "用药资料检测失败，请重新检测或删除资料。",
+      })
+      .where(eq(documents.id, docId))
+      .catch((updateError) => {
+        logger.error(
+          { err: updateError, docId },
+          "Failed to persist document coverage error"
+        );
+      });
+  }
 }
 
 export async function documentsRoutes(
-  fastify: FastifyInstance
+  fastify: FastifyInstance,
+  options: {
+    addTextSource?: (
+      notebookId: string,
+      title: string,
+      content: string
+    ) => Promise<{ id: string }>;
+    deleteSource?: (
+      notebookId: string,
+      sourceId: string
+    ) => Promise<boolean>;
+  } = {}
 ): Promise<void> {
   fastify.addHook("preHandler", authMiddleware);
+  const addTextSource =
+    options.addTextSource ??
+    ((notebookId: string, title: string, content: string) =>
+      withNotebookLM((client) =>
+        client.sources.addText(notebookId, title, content)
+      ));
+  const deleteSource =
+    options.deleteSource ??
+    ((notebookId: string, sourceId: string) =>
+      withNotebookLM((client) =>
+        client.sources.delete(notebookId, sourceId)
+      ));
 
   const handleBinaryUpload = async (
     request: UploadRequest,
@@ -102,14 +187,9 @@ export async function documentsRoutes(
         client.sources.addFile(notebookId, tmpPath, { mime: mimeType })
       );
     } catch (err) {
-      if (isAuthError(err)) {
-        return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-      }
-      const message = err instanceof Error ? err.message : "Unknown error";
       fastify.log.error({ err }, "Failed to add file source to NotebookLM");
-      return reply
-        .code(502)
-        .send({ error: `Failed to add source to NotebookLM: ${message}` });
+      const mapped = toNotebookLMError(err);
+      return reply.code(mapped.statusCode).send(mapped.body);
     } finally {
       await unlink(tmpPath).catch(() => {});
     }
@@ -124,10 +204,12 @@ export async function documentsRoutes(
         textContent: null,
         sourceStatus: "processing",
         sourceError: null,
+        coverageStatus: "pending",
+        coverageError: null,
       })
       .returning();
 
-    trackAndCover(
+    void trackAndCover(
       doc.id,
       caseId,
       caseRecord.notebookId,
@@ -174,18 +256,11 @@ export async function documentsRoutes(
     const notebookId = caseRecord.notebookId;
     let source;
     try {
-      source = await withNotebookLM((client) =>
-        client.sources.addText(notebookId, title, content)
-      );
+      source = await addTextSource(notebookId, title, content);
     } catch (err) {
-      if (isAuthError(err)) {
-        return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-      }
-      const message = err instanceof Error ? err.message : "Unknown error";
       fastify.log.error({ err }, "Failed to add text source to NotebookLM");
-      return reply
-        .code(502)
-        .send({ error: `Failed to add source to NotebookLM: ${message}` });
+      const mapped = toNotebookLMError(err);
+      return reply.code(mapped.statusCode).send(mapped.body);
     }
 
     const [doc] = await db
@@ -198,10 +273,12 @@ export async function documentsRoutes(
         textContent: content,
         sourceStatus: "processing",
         sourceError: null,
+        coverageStatus: "pending",
+        coverageError: null,
       })
       .returning();
 
-    trackAndCover(
+    void trackAndCover(
       doc.id,
       caseId,
       caseRecord.notebookId,
@@ -228,7 +305,15 @@ export async function documentsRoutes(
         .where(eq(documents.caseId, caseId))
         .orderBy(documents.createdAt);
 
-      return reply.send({ documents: docs });
+      return reply.send({
+        documents: docs.map((document) => ({
+          ...document,
+          sourceAuthority: classifySourceAuthority(
+            document.origin,
+            document.sourceUrl
+          ),
+        })),
+      });
     }
   );
 
@@ -258,7 +343,7 @@ export async function documentsRoutes(
 
       if (doc.notebookId && doc.sourceId) {
         if (doc.origin === null) {
-          trackAndCover(
+          void trackAndCover(
             doc.id,
             doc.caseId,
             doc.notebookId,
@@ -294,6 +379,8 @@ export async function documentsRoutes(
         .select({
           docId: documents.id,
           sourceId: documents.sourceId,
+          origin: documents.origin,
+          sourceStatus: documents.sourceStatus,
           notebookId: cases.notebookId,
           caseUserId: cases.userId,
         })
@@ -306,18 +393,33 @@ export async function documentsRoutes(
         return reply.code(404).send({ error: "Document not found" });
       }
 
+      // A ready auto source is tied to a durable case_drugs de-duplication
+      // record. Until that relationship is stored explicitly, deleting it
+      // would prevent the drug from ever being imported again. Processing and
+      // failed auto sources have no durable claim and remain recoverable.
+      if (doc.origin === "auto" && doc.sourceStatus === "ready") {
+        return reply.code(409).send({
+          code: "MANAGED_AUTO_SOURCE",
+          error: "自动补充的用药资料由系统管理，暂不能单独删除。",
+        });
+      }
+
       if (doc.notebookId && doc.sourceId) {
         const notebookId = doc.notebookId;
         const sourceId = doc.sourceId;
         try {
-          await withNotebookLM((client) =>
-            client.sources.delete(notebookId, sourceId)
-          );
+          const deleted = await deleteSource(notebookId, sourceId);
+          if (!deleted) {
+            const mapped = toRemoteDeleteError();
+            return reply.code(mapped.statusCode).send(mapped.body);
+          }
         } catch (err) {
-          fastify.log.warn(
+          fastify.log.error(
             { err, docId },
             "Failed to delete source from NotebookLM"
           );
+          const mapped = toRemoteDeleteError(err);
+          return reply.code(mapped.statusCode).send(mapped.body);
         }
       }
 

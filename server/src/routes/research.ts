@@ -5,11 +5,10 @@ import { cases, documents } from "../db/schema.js";
 import { authMiddleware } from "../middleware/auth.js";
 import {
   withNotebookLM,
-  isAuthError,
-  NOTEBOOKLM_AUTH_HINT,
   RESEARCH_STEERING,
 } from "../lib/notebooklm.js";
 import { trackSourceProcessing } from "../lib/source-tracking.js";
+import { toNotebookLMError } from "../lib/api-errors.js";
 
 // Structural twin of the CLI's ResearchSource (the type isn't re-exported from
 // the package root). The frontend round-trips these between poll and import.
@@ -35,8 +34,23 @@ async function findOwnedCase(caseId: string, userId: string) {
  * supply the query; Google's model searches, and the user picks which results
  * to import into the case notebook as grounded sources.
  */
-export async function researchRoutes(fastify: FastifyInstance): Promise<void> {
+export async function researchRoutes(
+  fastify: FastifyInstance,
+  options: {
+    startResearch?: (
+      notebookId: string,
+      query: string,
+      mode: "fast" | "deep"
+    ) => Promise<{ taskId: string } | null>;
+  } = {}
+): Promise<void> {
   fastify.addHook("preHandler", authMiddleware);
+  const startResearch =
+    options.startResearch ??
+    ((notebookId: string, query: string, mode: "fast" | "deep") =>
+      withNotebookLM((client) =>
+        client.research.start(notebookId, query, { mode })
+      ));
 
   fastify.post<{
     Params: { id: string };
@@ -60,10 +74,10 @@ export async function researchRoutes(fastify: FastifyInstance): Promise<void> {
 
     const notebookId = caseRecord.notebookId;
     try {
-      const task = await withNotebookLM((client) =>
-        client.research.start(notebookId, `${query} ${RESEARCH_STEERING}`, {
-          mode,
-        })
+      const task = await startResearch(
+        notebookId,
+        `${query} ${RESEARCH_STEERING}`,
+        mode
       );
       if (!task) {
         return reply
@@ -74,14 +88,9 @@ export async function researchRoutes(fastify: FastifyInstance): Promise<void> {
         .code(201)
         .send({ task: { taskId: task.taskId, query, mode } });
     } catch (err) {
-      if (isAuthError(err)) {
-        return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-      }
-      const message = err instanceof Error ? err.message : "Unknown error";
       fastify.log.error({ err }, "Failed to start NotebookLM research");
-      return reply
-        .code(502)
-        .send({ error: `Failed to start research: ${message}` });
+      const mapped = toNotebookLMError(err);
+      return reply.code(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -118,14 +127,9 @@ export async function researchRoutes(fastify: FastifyInstance): Promise<void> {
           },
         });
       } catch (err) {
-        if (isAuthError(err)) {
-          return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-        }
-        const message = err instanceof Error ? err.message : "Unknown error";
         fastify.log.error({ err }, "Failed to poll NotebookLM research");
-        return reply
-          .code(502)
-          .send({ error: `Failed to poll research: ${message}` });
+        const mapped = toNotebookLMError(err);
+        return reply.code(mapped.statusCode).send(mapped.body);
       }
     }
   );
@@ -166,14 +170,9 @@ export async function researchRoutes(fastify: FastifyInstance): Promise<void> {
         )
       );
     } catch (err) {
-      if (isAuthError(err)) {
-        return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-      }
-      const message = err instanceof Error ? err.message : "Unknown error";
       fastify.log.error({ err }, "Failed to import research sources");
-      return reply
-        .code(502)
-        .send({ error: `Failed to import sources: ${message}` });
+      const mapped = toNotebookLMError(err);
+      return reply.code(mapped.statusCode).send(mapped.body);
     }
 
     if (imported.length < selected.length) {
@@ -201,6 +200,8 @@ export async function researchRoutes(fastify: FastifyInstance): Promise<void> {
           origin: "research",
           sourceStatus: "processing",
           sourceError: null,
+          coverageStatus: "ready",
+          coverageError: null,
         })
         .returning();
       docs.push(doc);

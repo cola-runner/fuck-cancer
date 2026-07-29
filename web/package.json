@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test tests/auth-cookie.test.mjs tests/chat-failure.test.mjs tests/document-delete.test.mjs tests/source-label.test.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

@@ -9,6 +9,15 @@ interface UploadModalProps {
 
 type UploadTab = 'file' | 'camera' | 'text';
 
+function getErrorMessage(err: unknown): string {
+  if (typeof err === 'object' && err !== null && 'response' in err && typeof (err as { response?: unknown }).response === 'object') {
+    const response = (err as { response?: { data?: { error?: string } } }).response;
+    if (response?.data?.error) return response.data.error;
+  }
+  if (err instanceof Error) return err.message;
+  return '上传失败，请重试';
+}
+
 export default function UploadModal({ caseId, onClose, onUploadComplete }: UploadModalProps) {
   const [activeTab, setActiveTab] = useState<UploadTab>('file');
   const [dragOver, setDragOver] = useState(false);
@@ -20,16 +29,7 @@ export default function UploadModal({ caseId, onClose, onUploadComplete }: Uploa
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const getErrorMessage = (err: unknown) => {
-    if (typeof err === 'object' && err !== null && 'response' in err && typeof (err as { response?: unknown }).response === 'object') {
-      const response = (err as { response?: { data?: { error?: string } } }).response;
-      if (response?.data?.error) return response.data.error;
-    }
-    if (err instanceof Error) return err.message;
-    return '上传失败，请重试';
-  };
-
-  const handleFiles = async (files: FileList | File[]) => {
+  const handleFiles = useCallback(async (files: FileList | File[]) => {
     if (files.length === 0) return;
     setUploading(true);
     setError('');
@@ -49,7 +49,7 @@ export default function UploadModal({ caseId, onClose, onUploadComplete }: Uploa
       setUploading(false);
       setUploadProgress('');
     }
-  };
+  }, [caseId, onUploadComplete]);
 
   const handleTextSubmit = async () => {
     if (!textContent.trim()) return;
@@ -70,7 +70,7 @@ export default function UploadModal({ caseId, onClose, onUploadComplete }: Uploa
     e.preventDefault();
     setDragOver(false);
     if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
-  }, [caseId]);
+  }, [handleFiles]);
 
   const tabs: { key: UploadTab; label: string; icon: React.ReactNode }[] = [
     { key: 'file', label: '选择文件', icon: <Ic d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5zM14 3v5h5M12 18v-6m-2.5 2.5L12 12l2.5 2.5" /> },

@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../lib/auth-context';
 
 export default function AuthCallbackPage() {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [error, setError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const authError = searchParams.get('error');
+  const error = authError
+    ? authError === 'unauthorized'
+      ? '此账号不是本机配置的部署者账号'
+      : authError === 'invalid_state'
+        ? '登录请求已过期，请重新登录'
+        : 'Google 登录失败，请重试'
+    : loginError;
 
   useEffect(() => {
+    if (authError) return;
+
     login()
       .then(() => navigate('/cases', { replace: true }))
-      .catch(() => setError('Failed to complete login'));
-  }, [login, navigate]);
+      .catch(() => setLoginError('Failed to complete login'));
+  }, [authError, login, navigate]);
 
   return (
     <div className="min-h-dvh flex items-center justify-center" style={{ padding: 24 }}>

@@ -17,14 +17,14 @@ Cancer treatment isn't a single visit — it's months or years of reports, presc
 
 ## Why self-hosted
 
-Medical data is sensitive. This app stores **zero medical files on its own servers** — every file is a source in your own NotebookLM (Google) account. The local SQLite database only stores a lightweight index (case → notebook, document → source id) plus the chat transcript and citations. You run it on your own machine.
+Medical data is sensitive. This app does not retain uploaded binary files — every uploaded file becomes a source in the connected NotebookLM (Google) account. The local SQLite database stores case metadata, source indexes, pasted text notes, chat transcripts, and citations. You run it on your own machine.
 
 ## Stack
 
 | Layer | Tech |
 |-------|------|
-| Backend | Node.js 20 + Fastify + TypeScript |
-| Frontend | React 18 + Vite + TailwindCSS |
+| Backend | Node.js 24 + Fastify + TypeScript |
+| Frontend | React 19 + Vite + TailwindCSS |
 | Database | SQLite (single file, zero setup) |
 | Storage + AI | NotebookLM, via [`@cola_runner/notebooklm-cli`](https://www.npmjs.com/package/@cola_runner/notebooklm-cli) |
 | Auth | Google sign-in (identity only) |
@@ -36,7 +36,7 @@ No AI API keys to configure — all intelligence comes from your NotebookLM sess
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+ (Docker uses Node.js 24)
 - A Google account (used both for app sign-in and for NotebookLM)
 
 ### 1. Clone
@@ -48,16 +48,37 @@ cd fuck-cancer
 
 ### 2. Connect NotebookLM
 
-The server talks to NotebookLM through a saved browser session. On the host machine, log in once:
+The server talks to NotebookLM through a saved browser session. Keep that
+session in this project's dedicated private directory rather than mounting your
+whole CLI configuration:
 
 ```bash
-npx @cola_runner/notebooklm-cli login          # opens a browser to sign in
-# …or, headless:
-npx @cola_runner/notebooklm-cli login --paste   # paste a "Copy as cURL" / Cookie header
-npx @cola_runner/notebooklm-cli status           # confirm it worked
+umask 077
+mkdir -p server/data server/notebooklm-session
+chmod 700 server/data server/notebooklm-session
+
+# Preferred: no Playwright or automated Google sign-in.
+# Paste a NotebookLM request copied as cURL from your signed-in browser.
+npx @cola_runner/notebooklm-cli@0.1.4 login --paste \
+  --storage "$PWD/server/notebooklm-session/storage_state.json"
+chmod 600 server/notebooklm-session/storage_state.json
+
+npx @cola_runner/notebooklm-cli@0.1.4 status \
+  --storage "$PWD/server/notebooklm-session/storage_state.json"
 ```
 
-This writes a cookie jar to `~/.config/notebooklm-cli/storage_state.json`, which the server reads.
+The paste is read from standard input, so the cookie does not need to appear in
+your shell history or process arguments. The CLI verifies the session before
+saving it. If it expires later, rerun the same `login --paste --storage ...`
+command.
+
+The browser-driven `login --storage ...` flow is only an optional fallback and
+requires Playwright. The application itself does not need Playwright.
+
+`storage_state.json` grants access to the connected NotebookLM account. Never
+commit or share it. Docker mounts only `server/notebooklm-session/` read-write,
+because session refresh uses a temporary file and an atomic rename; it does not
+mount `~/.config/notebooklm-cli`.
 
 ### 3. Google OAuth setup (app sign-in)
 
@@ -66,7 +87,9 @@ Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 
 1. Create a new project (or use an existing one)
 2. Enable the **Google People API** (for sign-in / userinfo) — no Drive scope is needed
 3. Create an **OAuth 2.0 Client ID** (Web application type)
-4. Add authorized redirect URI: `http://localhost:3000/api/auth/google/callback`
+4. Add the authorized redirect URI for the origin users will actually open:
+   - Local desktop only: `http://localhost:5173/api/auth/google/callback`
+   - Phone / remote access: `https://your-domain.example/api/auth/google/callback`
 5. Copy the Client ID and Client Secret
 
 ### 4. Configure
@@ -79,17 +102,35 @@ Edit `server/.env` and fill in the secrets:
 
 ```env
 DATABASE_PATH=./data/fuckcancer.db
+NOTEBOOKLM_STORAGE_PATH=./notebooklm-session/storage_state.json
 
 JWT_SECRET=        # generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ENCRYPTION_KEY=    # generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+GOOGLE_REDIRECT_URI=http://localhost:5173/api/auth/google/callback
+OWNER_EMAIL=your-google-account@example.com  # only this account may sign in
 
 APP_ORIGIN=http://localhost:5173
 CORS_ORIGIN=http://localhost:5173
 ```
+
+For phone access, `localhost` and plain LAN HTTP are not a usable deployment:
+`localhost` on the phone means the phone itself, and Google web OAuth requires a
+real HTTPS callback outside its localhost development exception. Put the web
+service behind a trusted HTTPS reverse proxy or tunnel, point it at
+`http://127.0.0.1:5173`, and use one exact public origin everywhere:
+
+```env
+GOOGLE_REDIRECT_URI=https://your-domain.example/api/auth/google/callback
+APP_ORIGIN=https://your-domain.example
+CORS_ORIGIN=https://your-domain.example
+```
+
+Register that exact redirect URI in Google Cloud. Do not expose the backend
+port: the browser calls `/api` on the same HTTPS origin, and the web container
+proxies it to the private `server:3000` service.
 
 ### 5. Install and run
 
@@ -102,9 +143,9 @@ docker compose up --build
 This starts:
 
 - Web app at `http://localhost:5173`
-- API at `http://localhost:3000`
+- API available only through same-origin `/api` (port 3000 is not published)
 - SQLite database persisted in `server/data/`
-- Your NotebookLM session mounted from `~/.config/notebooklm-cli`
+- NotebookLM session persisted in `server/notebooklm-session/`
 
 **Local development without Docker**
 
@@ -119,7 +160,9 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173** and sign in with Google.
+For local desktop development, open **http://localhost:5173** and sign in with
+Google. On a phone, open the configured **HTTPS domain**, not the host's LAN IP
+and not `localhost`.
 
 ## Grounded answers with citations
 
@@ -137,9 +180,10 @@ No separate transcription step needed.
 
 ## Privacy
 
-- Medical files (images, PDFs, audio) are stored as sources in **your NotebookLM account**
-- The app database lives in a local SQLite file on **your machine** (indexes + chat transcript only)
+- Uploaded files (images, PDFs, audio) are stored as sources in the **connected NotebookLM account**
+- The app database lives in a local SQLite file on **your machine** (case metadata, source indexes, pasted text, and chat history)
 - AI runs through **your own NotebookLM session** — no third-party API keys
+- The NotebookLM cookie jar lives in the dedicated, gitignored `server/notebooklm-session/` directory with private permissions
 - The server processes uploads and chat in order to send them to NotebookLM, so treat the host machine as trusted infrastructure
 
 ## Project structure
@@ -152,7 +196,8 @@ fuck-cancer/
 │   │   ├── lib/            # notebooklm (self-healing client), drug-coverage,
 │   │   │                   #   source-tracking, auth, encryption
 │   │   └── db/             # SQLite schema + connection
-│   ├── data/              # Local SQLite database files (gitignored)
+│   ├── data/                # Local SQLite database files (gitignored)
+│   ├── notebooklm-session/  # Dedicated NotebookLM cookie jar (gitignored)
 │   └── Dockerfile
 ├── web/                    # React frontend
 │   ├── src/

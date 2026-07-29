@@ -1,9 +1,13 @@
 import type { Document } from '../pages/CaseDetailPage';
+import { getSourceLabel } from '../lib/source-label';
 
 interface DocumentCardProps {
   document: Document;
   onRetry?: (documentId: string) => void;
   retrying?: boolean;
+  onDelete?: (documentId: string) => void;
+  deleting?: boolean;
+  deleteError?: string;
 }
 
 function kindOf(d: Document): 'note' | 'web' | 'image' | 'audio' | 'pdf' | 'file' {
@@ -38,14 +42,35 @@ function snippet(s?: string | null) {
   return t.length > 150 ? `${t.slice(0, 147)}…` : t;
 }
 
-export default function DocumentCard({ document: d, onRetry, retrying = false }: DocumentCardProps) {
+export default function DocumentCard({
+  document: d,
+  onRetry,
+  retrying = false,
+  onDelete,
+  deleting = false,
+  deleteError,
+}: DocumentCardProps) {
   const kind = kindOf(d);
-  const isWeb = kind === 'web';
   const isAuto = d.origin === 'auto';
-  const tileBg = isWeb ? 'var(--official-tint)' : 'var(--sage-tint)';
-  const tileColor = isWeb ? 'var(--official)' : 'var(--sage-strong)';
+  const isOfficial = d.sourceAuthority === 'official';
+  const tileBg = isOfficial ? 'var(--official-tint)' : 'var(--sage-tint)';
+  const tileColor = isOfficial ? 'var(--official)' : 'var(--sage-strong)';
   const preview = snippet(d.textContent);
-  const canRetry = !!onRetry && d.sourceStatus === 'error';
+  const coveragePending = d.origin === null
+    && d.sourceStatus === 'ready'
+    && d.coverageStatus !== 'ready'
+    && d.coverageStatus !== 'error';
+  const coverageFailed = d.origin === null
+    && d.sourceStatus === 'ready'
+    && d.coverageStatus === 'error';
+  const canRetry = !!onRetry && (
+    d.sourceStatus === 'error'
+    || (isAuto && d.sourceStatus === 'processing')
+    || coveragePending
+    || coverageFailed
+  );
+  const canDelete = !!onDelete && !(d.origin === 'auto' && d.sourceStatus === 'ready');
+  const sourceLabel = getSourceLabel(d);
 
   return (
     <div className="fc-card fc-rise" style={{ padding: 15, marginBottom: 11, display: 'flex', gap: 13 }}>
@@ -57,19 +82,17 @@ export default function DocumentCard({ document: d, onRetry, retrying = false }:
             {d.fileName || '未命名资料'}
           </span>
           <div className="flex items-center" style={{ gap: 6, flexShrink: 0 }}>
-            {isAuto && <span className="fc-chip fc-chip-official" lang="zh">自动整理</span>}
+            {isAuto && <span className="fc-chip fc-chip-sage" lang="zh">自动整理</span>}
+            <span className={`fc-chip ${isOfficial ? 'fc-chip-official' : 'fc-chip-sage'}`} lang="zh">{sourceLabel}</span>
             {d.sourceStatus === 'processing' ? (
               <span className="fc-chip fc-chip-amber fc-pulse" lang="zh">整理中</span>
             ) : d.sourceStatus === 'error' ? (
               <span className="fc-chip fc-chip-clay" lang="zh">处理失败</span>
-            ) : isWeb ? (
-              <span className="fc-chip fc-chip-official" lang="zh">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" /></svg>
-                官方
-              </span>
-            ) : (
-              <span className="fc-chip fc-chip-sage" lang="zh">已就绪</span>
-            )}
+            ) : coveragePending ? (
+              <span className="fc-chip fc-chip-amber fc-pulse" lang="zh">用药检测中</span>
+            ) : coverageFailed ? (
+              <span className="fc-chip fc-chip-clay" lang="zh">用药检测失败</span>
+            ) : null}
           </div>
         </div>
 
@@ -81,6 +104,12 @@ export default function DocumentCard({ document: d, onRetry, retrying = false }:
 
         {d.sourceStatus === 'error' && d.sourceError && (
           <p lang="zh" style={{ fontSize: 12.5, marginTop: 6, color: 'var(--clay)', lineHeight: 1.55 }}>{d.sourceError}</p>
+        )}
+        {coverageFailed && d.coverageError && (
+          <p lang="zh" style={{ fontSize: 12.5, marginTop: 6, color: 'var(--clay)', lineHeight: 1.55 }}>{d.coverageError}</p>
+        )}
+        {deleteError && (
+          <p role="alert" lang="zh" style={{ fontSize: 12.5, marginTop: 6, color: 'var(--clay)', lineHeight: 1.55 }}>{deleteError}</p>
         )}
 
         <div className="flex items-center" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
@@ -101,9 +130,15 @@ export default function DocumentCard({ document: d, onRetry, retrying = false }:
             </span>
           )}
           {canRetry && (
-            <button type="button" disabled={retrying} onClick={() => onRetry!(d.id)}
+            <button type="button" disabled={retrying || deleting} onClick={() => onRetry!(d.id)}
               style={{ fontSize: 12.5, fontWeight: 600, color: retrying ? 'var(--ink-3)' : 'var(--sage-strong)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               {retrying ? '检测中…' : '重新检测'}
+            </button>
+          )}
+          {canDelete && (
+            <button type="button" disabled={deleting || retrying} onClick={() => onDelete!(d.id)}
+              style={{ fontSize: 12.5, fontWeight: 600, color: deleting ? 'var(--ink-3)' : 'var(--clay)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              {deleting ? '删除中…' : '删除'}
             </button>
           )}
         </div>

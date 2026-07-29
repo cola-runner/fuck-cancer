@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { caseDrugs, documents } from "../db/schema.js";
 import { withNotebookLM, RESEARCH_STEERING } from "./notebooklm.js";
 import { trackSourceProcessing } from "./source-tracking.js";
+import { and, eq } from "drizzle-orm";
 
 /**
  * Auto drug coverage — the app's core safety feature.
@@ -39,47 +40,204 @@ const TRUSTED_DOMAINS = [
 
 const MAX_DRUGS_PER_DOCUMENT = 8;
 const MAX_IMPORTS_PER_DRUG = 2;
+const MAX_IMPORT_ATTEMPTS = 2;
+const inFlightDrugCoverage = new Map<string, Promise<boolean>>();
 
 const EXTRACTION_QUESTION =
   "仅基于这份资料,列出其中提到的所有药物名称。每行输出一个药品名,不要编号、不要解释、不要任何其他文字。如果资料中没有提到任何药物,只回答:无";
+
+export interface DrugCoverageOptions {
+  ask?: (
+    notebookId: string,
+    question: string,
+    options: { sourceIds: string[] }
+  ) => Promise<{ answer: string }>;
+  importOfficialSources?: (
+    caseId: string,
+    notebookId: string,
+    drug: string,
+    logger: FastifyBaseLogger
+  ) => Promise<boolean>;
+}
+
+type SourceTracker = (
+  documentId: string,
+  notebookId: string,
+  sourceId: string,
+  logger: FastifyBaseLogger
+) => Promise<boolean>;
+
+type SourceDeleter = (
+  notebookId: string,
+  sourceId: string
+) => Promise<boolean>;
+
+export async function importedSourcesReady(
+  sources: Array<{ documentId: string; sourceId: string }>,
+  notebookId: string,
+  logger: FastifyBaseLogger,
+  tracker: SourceTracker = trackSourceProcessing,
+  deleteSource: SourceDeleter = (targetNotebookId, sourceId) =>
+    withNotebookLM((client) =>
+      client.sources.delete(targetNotebookId, sourceId)
+    )
+): Promise<boolean> {
+  if (sources.length === 0) return false;
+
+  const results = await Promise.all(
+    sources.map(async (source) => ({
+      source,
+      ready: await tracker(
+        source.documentId,
+        notebookId,
+        source.sourceId,
+        logger
+      ),
+    }))
+  );
+
+  await Promise.all(
+    results
+      .filter(({ ready }) => !ready)
+      .map(async ({ source }) => {
+        try {
+          const deleted = await deleteSource(notebookId, source.sourceId);
+          if (!deleted) {
+            logger.warn(
+              { documentId: source.documentId, sourceId: source.sourceId },
+              "Drug coverage: failed source could not be removed remotely"
+            );
+            return;
+          }
+          await db
+            .delete(documents)
+            .where(
+              and(
+                eq(documents.id, source.documentId),
+                eq(documents.sourceId, source.sourceId)
+              )
+            );
+        } catch (err) {
+          logger.warn(
+            {
+              err,
+              documentId: source.documentId,
+              sourceId: source.sourceId,
+            },
+            "Drug coverage: failed source cleanup failed"
+          );
+        }
+      })
+  );
+  return results.some(({ ready }) => ready);
+}
 
 export async function coverDrugsFromDocument(
   docId: string,
   caseId: string,
   notebookId: string,
   sourceId: string,
-  logger: FastifyBaseLogger
-): Promise<void> {
+  logger: FastifyBaseLogger,
+  options: DrugCoverageOptions = {}
+): Promise<boolean> {
   try {
-    const extraction = await withNotebookLM((client) =>
-      client.chat.ask(notebookId, EXTRACTION_QUESTION, {
-        sourceIds: [sourceId],
-      })
-    );
+    const ask =
+      options.ask ??
+      ((targetNotebookId, question, askOptions) =>
+        withNotebookLM((client) =>
+          client.chat.ask(targetNotebookId, question, askOptions)
+        ));
+    const importSources =
+      options.importOfficialSources ?? importOfficialSources;
+    const extraction = await ask(notebookId, EXTRACTION_QUESTION, {
+      sourceIds: [sourceId],
+    });
     const drugs = parseDrugNames(extraction.answer);
-    if (drugs.length === 0) return;
+    if (drugs.length === 0) return true;
     logger.info({ docId, drugs }, "Drug coverage: drugs mentioned in document");
 
+    let allCovered = true;
     for (const drug of drugs) {
-      // Claim the drug for this case atomically; if it's already claimed (by
-      // an earlier document or a concurrent pipeline) skip it. Failed imports
-      // stay claimed on purpose — endless retries against a drug that has no
-      // trusted source would loop on every upload.
-      const claimed = await db
-        .insert(caseDrugs)
-        .values({ caseId, drugName: drug })
-        .onConflictDoNothing()
-        .returning();
-      if (claimed.length === 0) continue;
-
-      try {
-        await importOfficialSources(caseId, notebookId, drug, logger);
-      } catch (err) {
-        logger.warn({ err, drug, caseId }, "Drug coverage import failed");
-      }
+      const covered = await ensureDrugCovered(
+        caseId,
+        notebookId,
+        drug,
+        logger,
+        importSources
+      );
+      if (!covered) allCovered = false;
     }
+    return allCovered;
   } catch (err) {
     logger.warn({ err, docId }, "Drug coverage pipeline failed");
+    return false;
+  }
+}
+
+async function ensureDrugCovered(
+  caseId: string,
+  notebookId: string,
+  drug: string,
+  logger: FastifyBaseLogger,
+  importSources: NonNullable<DrugCoverageOptions["importOfficialSources"]>
+): Promise<boolean> {
+  const claimKey = `${caseId}\0${drug}`;
+  const existingTask = inFlightDrugCoverage.get(claimKey);
+  if (existingTask) return existingTask;
+
+  // Only successful coverage is durable. In-flight work lives in memory, so a
+  // process crash cannot leave a permanent "covered" row before any source is
+  // ready. Concurrent document pipelines in this self-hosted process await the
+  // same task; the database unique index remains the final guard after success.
+  const task = (async () => {
+    const [existing] = await db
+      .select({ id: caseDrugs.id })
+      .from(caseDrugs)
+      .where(
+        and(
+          eq(caseDrugs.caseId, caseId),
+          eq(caseDrugs.drugName, drug)
+        )
+      )
+      .limit(1);
+    if (existing) return true;
+
+    for (let attempt = 1; attempt <= MAX_IMPORT_ATTEMPTS; attempt += 1) {
+      try {
+        const covered = await importSources(
+          caseId,
+          notebookId,
+          drug,
+          logger
+        );
+        if (covered) {
+          await db
+            .insert(caseDrugs)
+            .values({ caseId, drugName: drug })
+            .onConflictDoNothing();
+          return true;
+        }
+        logger.warn(
+          { drug, caseId, attempt },
+          "Drug coverage import produced no usable source"
+        );
+      } catch (err) {
+        logger.warn(
+          { err, drug, caseId, attempt },
+          "Drug coverage import failed"
+        );
+      }
+    }
+    return false;
+  })();
+
+  inFlightDrugCoverage.set(claimKey, task);
+  try {
+    return await task;
+  } finally {
+    if (inFlightDrugCoverage.get(claimKey) === task) {
+      inFlightDrugCoverage.delete(claimKey);
+    }
   }
 }
 
@@ -88,7 +246,7 @@ async function importOfficialSources(
   notebookId: string,
   drug: string,
   logger: FastifyBaseLogger
-): Promise<void> {
+): Promise<boolean> {
   const task = await withNotebookLM((client) =>
     client.research.start(
       notebookId,
@@ -98,7 +256,7 @@ async function importOfficialSources(
   );
   if (!task) {
     logger.warn({ drug }, "Drug coverage: research request rejected");
-    return;
+    return false;
   }
 
   const result = await withNotebookLM((client) =>
@@ -108,7 +266,7 @@ async function importOfficialSources(
   );
   if (result.status !== "completed") {
     logger.warn({ drug }, "Drug coverage: research timed out");
-    return;
+    return false;
   }
 
   const trusted = result.sources
@@ -118,13 +276,14 @@ async function importOfficialSources(
 
   if (trusted.length === 0) {
     logger.info({ drug }, "Drug coverage: no trusted source in results");
-    return;
+    return false;
   }
 
   const imported = await withNotebookLM((client) =>
     client.research.importSources(notebookId, task.taskId, trusted)
   );
   const urlByTitle = new Map(trusted.map((s) => [s.title, s.url]));
+  const trackedSources: Array<{ documentId: string; sourceId: string }> = [];
 
   for (const row of imported) {
     const [doc] = await db
@@ -132,22 +291,30 @@ async function importOfficialSources(
       .values({
         caseId,
         sourceId: row.id,
-        fileName: row.title || `${drug} 官方资料`,
+        fileName: row.title || `${drug} 用药资料`,
         fileType: "web",
         textContent: null,
         sourceUrl: urlByTitle.get(row.title) ?? null,
         origin: "auto",
         sourceStatus: "processing",
         sourceError: null,
+        coverageStatus: "ready",
+        coverageError: null,
       })
       .returning();
-    void trackSourceProcessing(doc.id, notebookId, row.id, logger);
+    trackedSources.push({ documentId: doc.id, sourceId: row.id });
   }
 
-  logger.info(
-    { drug, imported: imported.length },
-    "Drug coverage: official sources imported"
+  const ready = await importedSourcesReady(
+    trackedSources,
+    notebookId,
+    logger
   );
+  logger.info(
+    { drug, imported: imported.length, ready },
+    "Drug coverage: official sources processed"
+  );
+  return ready;
 }
 
 /** Index into TRUSTED_DOMAINS (lower = higher priority), or -1 if untrusted. */

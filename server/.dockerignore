@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+
+.env*
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+data
+notebooklm-session
+storage_state.json
+
+*.log
+.git
+.superpowers

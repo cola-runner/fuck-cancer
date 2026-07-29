@@ -85,7 +85,8 @@ export default function ResearchModal({ caseId, onClose, onImportComplete }: Res
 
   const toggle = (i: number) => setSelected((prev) => {
     const next = new Set(prev);
-    next.has(i) ? next.delete(i) : next.add(i);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
     return next;
   });
 

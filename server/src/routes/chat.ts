@@ -3,13 +3,27 @@ import { db } from "../db/index.js";
 import { conversations, cases, documents } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth.js";
-import {
-  withNotebookLM,
-  isAuthError,
-  NOTEBOOKLM_AUTH_HINT,
-} from "../lib/notebooklm.js";
+import { withNotebookLM } from "../lib/notebooklm.js";
+import { toNotebookLMError } from "../lib/api-errors.js";
 
-export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
+interface ChatAskResult {
+  answer: string;
+  conversationId?: string;
+  references: Array<{ sourceId: string; [key: string]: unknown }>;
+}
+
+export interface ChatRoutesOptions {
+  ask?: (
+    notebookId: string,
+    message: string,
+    options: { conversationId?: string; sourceIds?: string[] }
+  ) => Promise<ChatAskResult>;
+}
+
+export async function chatRoutes(
+  fastify: FastifyInstance,
+  options: ChatRoutesOptions = {}
+): Promise<void> {
   fastify.addHook("preHandler", authMiddleware);
 
   // Ask a question against the case's notebook (NotebookLM grounded chat).
@@ -41,26 +55,83 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         .send({ error: "Case has no NotebookLM notebook." });
     }
 
-    // Store the user message
-    const [userMsg] = await db
-      .insert(conversations)
-      .values({
-        caseId,
-        role: "user",
-        content: message,
-      })
-      .returning();
-
     // Map source id → file name up front so we can give each citation a
     // human-readable source label instead of a raw source UUID.
     const caseDocs = await db
-      .select({ sourceId: documents.sourceId, fileName: documents.fileName })
+      .select({
+        sourceId: documents.sourceId,
+        fileName: documents.fileName,
+        sourceStatus: documents.sourceStatus,
+        origin: documents.origin,
+        coverageStatus: documents.coverageStatus,
+      })
       .from(documents)
       .where(eq(documents.caseId, caseId));
+
+    if (
+      caseDocs.some(
+        (document) =>
+          document.sourceStatus !== "ready" &&
+          document.sourceStatus !== "error"
+      )
+    ) {
+      return reply.code(409).send({
+        code: "SOURCES_NOT_READY",
+        error: "仍有资料正在处理，请稍后重试。",
+      });
+    }
+
+    if (caseDocs.some((document) => document.sourceStatus === "error")) {
+      return reply.code(409).send({
+        code: "SOURCES_FAILED",
+        error: "有资料处理失败，请重试或删除失败资料。",
+      });
+    }
+
+    const userDocuments = caseDocs.filter(
+      (document) => document.origin === null
+    );
+    if (
+      userDocuments.some(
+        (document) =>
+          document.coverageStatus !== "ready" &&
+          document.coverageStatus !== "error"
+      )
+    ) {
+      return reply.code(409).send({
+        code: "COVERAGE_NOT_READY",
+        error: "仍在检查病历中的用药并补充资料，请稍后重试。",
+      });
+    }
+
+    if (
+      userDocuments.some(
+        (document) => document.coverageStatus === "error"
+      )
+    ) {
+      return reply.code(409).send({
+        code: "COVERAGE_FAILED",
+        error: "用药资料补充失败，请重新检测或删除对应病历。",
+      });
+    }
+
+    const readyDocs = caseDocs.filter(
+      (document): document is typeof document & { sourceId: string } =>
+        document.sourceStatus === "ready" &&
+        typeof document.sourceId === "string" &&
+        document.sourceId.length > 0
+    );
+    if (readyDocs.length === 0) {
+      return reply.code(409).send({
+        code: "NO_READY_SOURCES",
+        error: "没有可用于问答的就绪资料。",
+      });
+    }
+
+    const readySourceIds = readyDocs.map((document) => document.sourceId);
+    const readySourceIdSet = new Set(readySourceIds);
     const nameBySource = new Map(
-      caseDocs
-        .filter((d) => d.sourceId)
-        .map((d) => [d.sourceId as string, d.fileName])
+      readyDocs.map((document) => [document.sourceId, document.fileName])
     );
 
     // Ask NotebookLM. It grounds the answer in the notebook's sources and
@@ -70,46 +141,72 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     let enrichedRefs: Array<Record<string, unknown>>;
     const notebookId = caseRecord.notebookId;
     try {
-      const result = await withNotebookLM((client) =>
-        client.chat.ask(notebookId, message, {
-          conversationId: caseRecord.nlmConversationId ?? undefined,
-        })
-      );
+      const ask =
+        options.ask ??
+        ((targetNotebookId, targetMessage, askOptions) =>
+          withNotebookLM((client) =>
+            client.chat.ask(targetNotebookId, targetMessage, askOptions)
+          ));
+      const result = await ask(notebookId, message, {
+        conversationId: caseRecord.nlmConversationId ?? undefined,
+        sourceIds: readySourceIds,
+      });
       answer = result.answer;
       conversationId = result.conversationId;
-      enrichedRefs = result.references.map((ref) => ({
-        ...ref,
-        fileName: nameBySource.get(ref.sourceId) ?? null,
-      }));
+      enrichedRefs = result.references
+        .filter((reference) => readySourceIdSet.has(reference.sourceId))
+        .map((reference) => ({
+          ...reference,
+          fileName: nameBySource.get(reference.sourceId) ?? null,
+        }));
     } catch (err) {
-      if (isAuthError(err)) {
-        return reply.code(401).send({ error: NOTEBOOKLM_AUTH_HINT });
-      }
-      const message = err instanceof Error ? err.message : "Unknown error";
       fastify.log.error({ err }, "NotebookLM chat request failed");
-      return reply
-        .code(502)
-        .send({ error: `NotebookLM request failed: ${message}` });
+      const mapped = toNotebookLMError(err);
+      return reply.code(mapped.statusCode).send(mapped.body);
     }
 
-    // Persist the latest conversation id for multi-turn follow-ups.
-    if (conversationId && conversationId !== caseRecord.nlmConversationId) {
-      await db
-        .update(cases)
-        .set({ nlmConversationId: conversationId, updatedAt: new Date() })
-        .where(eq(cases.id, caseId));
+    if (enrichedRefs.length === 0) {
+      return reply.code(502).send({
+        code: "UNGROUNDED_RESPONSE",
+        error: "回答没有可验证的资料引用，本次对话未保存。",
+      });
     }
 
-    // Store the assistant response with its citations
-    const [assistantMsg] = await db
-      .insert(conversations)
-      .values({
-        caseId,
-        role: "assistant",
-        content: answer,
-        references: enrichedRefs,
-      })
-      .returning();
+    const { userMsg, assistantMsg } = db.transaction((transaction) => {
+      const [storedUserMessage] = transaction
+        .insert(conversations)
+        .values({
+          caseId,
+          role: "user",
+          content: message,
+        })
+        .returning()
+        .all();
+
+      const [storedAssistantMessage] = transaction
+        .insert(conversations)
+        .values({
+          caseId,
+          role: "assistant",
+          content: answer,
+          references: enrichedRefs,
+        })
+        .returning()
+        .all();
+
+      if (conversationId && conversationId !== caseRecord.nlmConversationId) {
+        transaction
+          .update(cases)
+          .set({ nlmConversationId: conversationId, updatedAt: new Date() })
+          .where(eq(cases.id, caseId))
+          .run();
+      }
+
+      return {
+        userMsg: storedUserMessage,
+        assistantMsg: storedAssistantMessage,
+      };
+    });
 
     return reply.send({
       userMessage: userMsg,

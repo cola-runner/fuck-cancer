@@ -3,6 +3,7 @@ import { verifyToken } from "../lib/auth.js";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { config, normalizeEmail } from "../lib/config.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -20,12 +21,14 @@ export async function authMiddleware(
   reply: FastifyReply
 ): Promise<void> {
   const header = request.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    reply.code(401).send({ error: "Missing or invalid authorization header" });
+  const bearerToken =
+    header?.startsWith("Bearer ") ? header.slice(7) : undefined;
+  const token = request.cookies?.fc_session || bearerToken;
+
+  if (!token) {
+    reply.code(401).send({ error: "Missing or invalid session" });
     return;
   }
-
-  const token = header.slice(7);
 
   try {
     const payload = verifyToken(token);
@@ -38,6 +41,15 @@ export async function authMiddleware(
 
     if (!user) {
       reply.code(401).send({ error: "User not found" });
+      return;
+    }
+
+    const userEmail = normalizeEmail(user.email);
+    if (
+      userEmail !== config.ownerEmail ||
+      normalizeEmail(payload.email) !== userEmail
+    ) {
+      reply.code(401).send({ error: "Invalid session user" });
       return;
     }
 

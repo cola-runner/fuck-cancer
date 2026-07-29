@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import DocumentCard from '../components/DocumentCard';
 import UploadModal from '../components/UploadModal';
 import ResearchModal from '../components/ResearchModal';
+import type { SourceAuthority } from '../lib/source-label';
 
 interface CaseDetail {
   id: string;
@@ -22,8 +23,11 @@ export interface Document {
   textContent: string | null;
   sourceUrl: string | null;
   origin: 'research' | 'auto' | null;
+  sourceAuthority?: SourceAuthority | null;
   sourceStatus: 'processing' | 'ready' | 'error';
   sourceError: string | null;
+  coverageStatus: 'pending' | 'ready' | 'error';
+  coverageError: string | null;
   createdAt: string;
 }
 
@@ -38,21 +42,10 @@ export default function CaseDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ patientName: '', diagnosis: '' });
   const [retryingDocId, setRetryingDocId] = useState<string | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => { loadCase(); }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    const hasActive = documents.some((d) => d.sourceStatus === 'processing');
-    // keep polling a while after the newest doc — the drug-coverage pipeline
-    // adds official leaflets a couple minutes after an upload finishes.
-    const hasRecent = documents.some((d) => Date.now() - new Date(d.createdAt).getTime() < 3 * 60 * 1000);
-    if (!hasActive && !hasRecent) return;
-    const t = window.setTimeout(() => loadCase({ silent: true }), hasActive ? 2000 : 6000);
-    return () => window.clearTimeout(t);
-  }, [documents, id]);
-
-  const loadCase = async (options?: { silent?: boolean }) => {
+  const loadCase = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
     try {
       const [caseRes, docsRes] = await Promise.all([
@@ -67,7 +60,25 @@ export default function CaseDetailPage() {
     } finally {
       if (!options?.silent) setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => { void loadCase(); }, [loadCase]);
+
+  useEffect(() => {
+    if (!id) return;
+    const now = Date.now();
+    const hasRecentActive = documents.some((d) => {
+      const active = d.sourceStatus === 'processing'
+        || (d.origin === null && d.coverageStatus === 'pending');
+      return active && now - new Date(d.createdAt).getTime() < 10 * 60 * 1000;
+    });
+    // keep polling a while after the newest doc — the drug-coverage pipeline
+    // adds official leaflets a couple minutes after an upload finishes.
+    const hasRecent = documents.some((d) => now - new Date(d.createdAt).getTime() < 3 * 60 * 1000);
+    if (!hasRecentActive && !hasRecent) return;
+    const t = window.setTimeout(() => { void loadCase({ silent: true }); }, hasRecentActive ? 2000 : 6000);
+    return () => window.clearTimeout(t);
+  }, [documents, id, loadCase]);
 
   const handleSaveEdit = async () => {
     try {
@@ -94,11 +105,37 @@ export default function CaseDetailPage() {
     }
   };
 
+  const handleDeleteDoc = async (documentId: string) => {
+    const target = documents.find((document) => document.id === documentId);
+    if (!window.confirm(`确定删除“${target?.fileName || '这份资料'}”吗？`)) return;
+
+    setDeletingDocId(documentId);
+    setDeleteErrors((prev) => {
+      const next = { ...prev };
+      delete next[documentId];
+      return next;
+    });
+    try {
+      await api.delete(`/documents/${documentId}`);
+      setDocuments((prev) => prev.filter((document) => document.id !== documentId));
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+      setDeleteErrors((prev) => ({
+        ...prev,
+        [documentId]: '删除失败，资料仍在，可重试',
+      }));
+    } finally {
+      setDeletingDocId(null);
+    }
+  };
+
   const byNewest = (a: Document, b: Document) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   const userDocs = documents.filter((d) => d.origin == null).sort(byNewest);
   const officialDocs = documents.filter((d) => d.origin != null).sort(byNewest);
-  const hasAuto = documents.some((d) => d.origin === 'auto');
+  const hasOfficialAuto = documents.some(
+    (d) => d.origin === 'auto' && d.sourceAuthority === 'official' && d.sourceStatus === 'ready',
+  );
 
   if (loading) {
     return (
@@ -160,15 +197,15 @@ export default function CaseDetailPage() {
         )}
 
         {/* Reassurance banner — the core feature, framed as care */}
-        {hasAuto && (
+        {hasOfficialAuto && (
           <div className="fc-rise" style={{ background: 'linear-gradient(135deg, var(--sage-tint) 0%, var(--sage-tint-2) 100%)', borderRadius: 'var(--r-lg)', padding: '16px 17px', display: 'flex', gap: 13, marginBottom: 26 }}>
             <div style={{ color: 'var(--sage-strong)', flexShrink: 0, marginTop: 1 }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" /><path d="M9 12l2 2 4-4" strokeWidth="1.6" /></svg>
             </div>
             <div>
-              <div lang="zh" style={{ fontSize: 15, fontWeight: 600, color: 'var(--sage-strong)' }}>已为你收集官方用药说明</div>
+              <div lang="zh" style={{ fontSize: 15, fontWeight: 600, color: 'var(--sage-strong)' }}>已为你收集用药资料</div>
               <p lang="zh" style={{ fontSize: 13.5, color: 'var(--sage-strong)', opacity: .9, marginTop: 3 }}>
-                根据你上传的资料，我自动找到了相关药物的 FDA / DailyMed 权威说明书。问答时会引用原文，不会乱猜。
+                至少一份已就绪资料标记为官方来源；具体来源请以资料卡和原文链接为准。
               </p>
             </div>
           </div>
@@ -182,7 +219,17 @@ export default function CaseDetailPage() {
         {userDocs.length === 0 ? (
           <EmptyHint text="还没有资料，点「添加」上传出院记录、检查报告或处方照片。" />
         ) : (
-          userDocs.map((d) => <DocumentCard key={d.id} document={d} onRetry={handleRefreshDoc} retrying={retryingDocId === d.id} />)
+          userDocs.map((d) => (
+            <DocumentCard
+              key={d.id}
+              document={d}
+              onRetry={handleRefreshDoc}
+              retrying={retryingDocId === d.id}
+              onDelete={handleDeleteDoc}
+              deleting={deletingDocId === d.id}
+              deleteError={deleteErrors[d.id]}
+            />
+          ))
         )}
 
         {/* Official / collected */}
@@ -192,9 +239,19 @@ export default function CaseDetailPage() {
             action={<HeaderBtn onClick={() => setShowResearch(true)} icon="search" label="搜索资料" />}
           />
           {officialDocs.length === 0 ? (
-            <EmptyHint text="上传含药物的资料后，这里会自动出现官方说明书；也可以手动搜索。" />
+            <EmptyHint text="上传含药物的资料后，这里会自动补充用药说明与相关资料；也可以手动搜索。" />
           ) : (
-            officialDocs.map((d) => <DocumentCard key={d.id} document={d} onRetry={handleRefreshDoc} retrying={retryingDocId === d.id} />)
+            officialDocs.map((d) => (
+              <DocumentCard
+                key={d.id}
+                document={d}
+                onRetry={handleRefreshDoc}
+                retrying={retryingDocId === d.id}
+                onDelete={handleDeleteDoc}
+                deleting={deletingDocId === d.id}
+                deleteError={deleteErrors[d.id]}
+              />
+            ))
           )}
         </div>
       </div>

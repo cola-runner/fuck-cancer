@@ -5,22 +5,26 @@ services:
       dockerfile: Dockerfile
     env_file:
       - ./server/.env
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
+      APP_DATA_DIR: /app/data
       DATABASE_PATH: /app/data/fuckcancer.db
-      NOTEBOOKLM_STORAGE_PATH: /app/notebooklm/storage_state.json
+      NOTEBOOKLM_SESSION_DIR: /app/notebooklm-session
+      NOTEBOOKLM_STORAGE_PATH: /app/notebooklm-session/storage_state.json
+    tmpfs:
+      - /tmp:size=536870912,uid=1000,gid=1000,mode=0700
     volumes:
       - ./server/data:/app/data
-      # The NotebookLM session captured by `npx @cola_runner/notebooklm-cli login`
-      # on the host. Mounted read-write so the server can refresh rotating cookies.
-      - ${HOME}/.config/notebooklm-cli:/app/notebooklm
+      # Mount the dedicated directory, not only storage_state.json: the CLI
+      # refreshes the session with an atomic temporary-file rename.
+      - ./server/notebooklm-session:/app/notebooklm-session
 
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     depends_on:
       - server

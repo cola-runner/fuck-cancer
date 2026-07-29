@@ -4,9 +4,9 @@ import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { signToken } from "../lib/auth.js";
-import { decrypt, encrypt } from "../lib/encryption.js";
-import { config } from "../lib/config.js";
+import { config, normalizeEmail } from "../lib/config.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 
 // Google sign-in is used for app identity only — file storage lives in
 // NotebookLM, so we no longer request the Drive scope.
@@ -17,6 +17,15 @@ interface GoogleTokens {
   token_type?: string;
   expiry_date?: number;
   id_token?: string;
+}
+
+export interface GoogleIdentity {
+  email: string;
+  name?: string | null;
+}
+
+export interface AuthRoutesOptions {
+  exchangeGoogleCode?: (code: string) => Promise<GoogleIdentity>;
 }
 
 const GOOGLE_SCOPES = [
@@ -41,7 +50,7 @@ function createGoogleClient() {
   );
 }
 
-async function exchangeGoogleCode(code: string) {
+async function fetchGoogleIdentity(code: string): Promise<GoogleIdentity> {
   const oauth2Client = createGoogleClient();
   const tokenResponse = await oauth2Client.getToken(code);
   const tokens = tokenResponse.tokens as GoogleTokens;
@@ -58,39 +67,21 @@ async function exchangeGoogleCode(code: string) {
     throw new Error("Could not retrieve email from Google");
   }
 
-  return { profile, tokens };
+  return { email: profile.email, name: profile.name };
 }
 
-async function upsertGoogleUser(
-  email: string,
-  name: string | null | undefined,
-  tokens: GoogleTokens
-) {
+async function upsertOwnerUser(email: string, name?: string | null) {
   const [existingUser] = await db
     .select()
     .from(users)
     .where(eq(users.email, email))
     .limit(1);
 
-  let mergedTokens = tokens;
-  if (existingUser?.googleToken) {
-    try {
-      const existingTokens = JSON.parse(decrypt(existingUser.googleToken)) as GoogleTokens;
-      if (!tokens.refresh_token && existingTokens.refresh_token) {
-        mergedTokens = { ...existingTokens, ...tokens };
-      }
-    } catch {
-      mergedTokens = tokens;
-    }
-  }
-
-  const encryptedToken = encrypt(JSON.stringify(mergedTokens));
-
   if (existingUser) {
     const [updated] = await db
       .update(users)
       .set({
-        googleToken: encryptedToken,
+        googleToken: null,
         name: name || existingUser.name,
         updatedAt: new Date(),
       })
@@ -104,30 +95,72 @@ async function upsertGoogleUser(
     .values({
       email,
       name: name || null,
-      googleToken: encryptedToken,
+      googleToken: null,
     })
     .returning();
 
   return created;
 }
 
-export async function authRoutes(fastify: FastifyInstance): Promise<void> {
+function statesMatch(received: string, expected: string): boolean {
+  const receivedBuffer = Buffer.from(received);
+  const expectedBuffer = Buffer.from(expected);
+  return (
+    receivedBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(receivedBuffer, expectedBuffer)
+  );
+}
+
+export async function authRoutes(
+  fastify: FastifyInstance,
+  options: AuthRoutesOptions = {}
+): Promise<void> {
+  const exchangeGoogleCode =
+    options.exchangeGoogleCode ?? fetchGoogleIdentity;
+  const secureCookies = getAppOrigin().startsWith("https://");
+
   fastify.get("/api/auth/google", async (_request, reply) => {
     const oauth2Client = createGoogleClient();
+    const state = randomBytes(32).toString("base64url");
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
       prompt: "consent",
       include_granted_scopes: true,
       scope: GOOGLE_SCOPES,
+      state,
     });
 
+    reply.setCookie("fc_oauth_state", state, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: secureCookies,
+      maxAge: 10 * 60,
+      signed: true,
+    });
     return reply.redirect(authUrl);
   });
 
   fastify.get<{
-    Querystring: { code?: string; error?: string };
+    Querystring: { code?: string; error?: string; state?: string };
   }>("/api/auth/google/callback", async (request, reply) => {
     const callbackUrl = new URL("/auth/callback", getAppOrigin());
+    const signedState = request.cookies.fc_oauth_state;
+    const unsignedState = signedState
+      ? request.unsignCookie(signedState)
+      : { valid: false, value: null };
+
+    reply.clearCookie("fc_oauth_state", { path: "/" });
+
+    if (
+      !request.query.state ||
+      !unsignedState.valid ||
+      !unsignedState.value ||
+      !statesMatch(request.query.state, unsignedState.value)
+    ) {
+      callbackUrl.searchParams.set("error", "invalid_state");
+      return reply.redirect(callbackUrl.toString());
+    }
 
     if (request.query.error) {
       callbackUrl.searchParams.set("error", request.query.error);
@@ -140,58 +173,40 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const { profile, tokens } = await exchangeGoogleCode(request.query.code);
-      const user = await upsertGoogleUser(profile.email!, profile.name, tokens);
+      const identity = await exchangeGoogleCode(request.query.code);
+      const email = normalizeEmail(identity.email);
+
+      if (email !== config.ownerEmail) {
+        callbackUrl.searchParams.set("error", "unauthorized");
+        return reply.redirect(callbackUrl.toString());
+      }
+
+      const user = await upsertOwnerUser(email, identity.name);
       const jwt = signToken({ userId: user.id, email: user.email });
 
-      callbackUrl.searchParams.set("token", jwt);
-      return reply.redirect(callbackUrl.toString());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      callbackUrl.searchParams.set("error", message);
-      return reply.redirect(callbackUrl.toString());
-    }
-  });
-
-  // Exchange Google auth code for tokens, create/find user, return JWT
-  fastify.post<{
-    Body: { code: string; redirectUri: string };
-  }>("/api/auth/google", async (request, reply) => {
-    const { code } = request.body;
-
-    if (!code) {
-      return reply.code(400).send({ error: "code is required" });
-    }
-
-    try {
-      const { profile, tokens } = await exchangeGoogleCode(code);
-      const user = await upsertGoogleUser(profile.email!, profile.name, tokens);
-      const jwt = signToken({ userId: user.id, email: user.email });
-
-      return reply.send({
-        token: jwt,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        },
+      reply.setCookie("fc_session", jwt, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: secureCookies,
+        maxAge: 7 * 24 * 60 * 60,
       });
+      return reply.redirect(callbackUrl.toString());
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      return reply.code(400).send({ error: `Failed to exchange code: ${message}` });
+      request.log.error(
+        { error: err instanceof Error ? err.message : "Unknown error" },
+        "Google sign-in failed"
+      );
+      callbackUrl.searchParams.set("error", "login_failed");
+      return reply.redirect(callbackUrl.toString());
     }
   });
 
-  // Logout - client-side token removal, but we can also clear the Google token
   fastify.post(
     "/api/auth/logout",
     { preHandler: authMiddleware },
-    async (request, reply) => {
-      await db
-        .update(users)
-        .set({ googleToken: null, updatedAt: new Date() })
-        .where(eq(users.id, request.user.id));
-
+    async (_request, reply) => {
+      reply.clearCookie("fc_session", { path: "/" });
       return reply.send({ success: true });
     }
   );
@@ -206,7 +221,6 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           id: request.user.id,
           email: request.user.email,
           name: request.user.name,
-          hasGoogleToken: !!request.user.googleToken,
         },
       });
     }

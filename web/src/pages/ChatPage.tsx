@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 
@@ -24,21 +24,27 @@ const SUGGESTED = [
   '饮食上要注意什么？',
 ];
 
+function requestErrorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: { error?: string } } }).response;
+    if (response?.data?.error) return response.data.error;
+  }
+  return '发送失败，请稍后重试。';
+}
+
 export default function ChatPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const [connected, setConnected] = useState(true);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { loadChat(); }, [id]);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
-  const loadChat = async () => {
+  const loadChat = useCallback(async () => {
     try {
       const [chatRes, settingsRes] = await Promise.all([
         api.get(`/cases/${id}/chat`),
@@ -51,7 +57,10 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => { void loadChat(); }, [loadChat]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
@@ -59,13 +68,16 @@ export default function ChatPage() {
     const userMessage: Message = { id: `temp-${Date.now()}`, role: 'user', content: trimmed, createdAt: new Date().toISOString() };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    setSendError('');
     setSending(true);
     try {
       const { data } = await api.post(`/cases/${id}/chat`, { message: trimmed });
       setMessages((prev) => [...prev.filter((m) => m.id !== userMessage.id), data.userMessage, data.assistantMessage]);
     } catch (err) {
       console.error('Failed to send message:', err);
-      setMessages((prev) => [...prev, { id: `error-${Date.now()}`, role: 'assistant', content: '抱歉，发送失败了，请稍后再试。', createdAt: new Date().toISOString() }]);
+      setMessages((prev) => prev.filter((message) => message.id !== userMessage.id));
+      setInput(trimmed);
+      setSendError(requestErrorMessage(err));
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -116,7 +128,7 @@ export default function ChatPage() {
                 <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.9L18.8 9.7 13.8 11.5 12 16.4 10.2 11.5 5.2 9.7 10.2 7.9z" /></svg>
               </div>
               <h3 className="fc-display" lang="zh" style={{ fontSize: 19, color: 'var(--ink)', marginBottom: 6 }}>有什么想了解的？</h3>
-              <p className="fc-muted" lang="zh" style={{ fontSize: 14.5, maxWidth: 300, margin: '0 auto' }}>我会基于这个病例的资料回答，并附上官方说明书出处。</p>
+              <p className="fc-muted" lang="zh" style={{ fontSize: 14.5, maxWidth: 300, margin: '0 auto' }}>我会基于这个病例的资料回答，并附上可核验的资料出处。</p>
             </div>
           ) : (
             messages.map((m) => (m.role === 'user'
@@ -147,28 +159,38 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="flex-shrink-0" style={{ background: 'var(--bg)', borderTop: '1px solid var(--line)' }}>
-        <div className="mx-auto flex items-center" style={{ maxWidth: 720, gap: 10, padding: '12px 18px calc(14px + env(safe-area-inset-bottom))' }}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="问问关于病情、用药的任何问题…"
-            rows={1}
-            lang="zh"
-            disabled={disabled}
-            className="flex-1"
-            style={{ border: 'none', background: 'var(--surface)', borderRadius: 22, padding: '13px 18px', fontSize: 15.5, color: 'var(--ink)', boxShadow: 'var(--shadow-sm)', outline: 'none', resize: 'none', maxHeight: 120, fontFamily: 'inherit', lineHeight: 1.5 }}
-          />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || sending || disabled}
-            aria-label="发送"
-            className="flex-shrink-0 flex items-center justify-center"
-            style={{ width: 48, height: 48, borderRadius: '50%', border: 'none', cursor: input.trim() && !disabled ? 'pointer' : 'default', background: !input.trim() || disabled ? 'var(--line)' : 'var(--sage)', color: !input.trim() || disabled ? 'var(--ink-3)' : '#fff', boxShadow: !input.trim() || disabled ? 'none' : 'var(--shadow-sage)', transition: 'background .2s ease' }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l14-7-5 7 5 7-14-7z" /></svg>
-          </button>
+        <div className="mx-auto" style={{ maxWidth: 720, padding: '10px 18px calc(14px + env(safe-area-inset-bottom))' }}>
+          {sendError && (
+            <div role="alert" lang="zh" style={{ color: 'var(--clay)', fontSize: 13, marginBottom: 8, padding: '0 4px' }}>
+              {sendError}
+            </div>
+          )}
+          <div className="flex items-center" style={{ gap: 10 }}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                if (sendError) setSendError('');
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="问问关于病情、用药的任何问题…"
+              rows={1}
+              lang="zh"
+              disabled={disabled}
+              className="flex-1"
+              style={{ border: 'none', background: 'var(--surface)', borderRadius: 22, padding: '13px 18px', fontSize: 15.5, color: 'var(--ink)', boxShadow: 'var(--shadow-sm)', outline: 'none', resize: 'none', maxHeight: 120, fontFamily: 'inherit', lineHeight: 1.5 }}
+            />
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || sending || disabled}
+              aria-label="发送"
+              className="flex-shrink-0 flex items-center justify-center"
+              style={{ width: 48, height: 48, borderRadius: '50%', border: 'none', cursor: input.trim() && !disabled ? 'pointer' : 'default', background: !input.trim() || disabled ? 'var(--line)' : 'var(--sage)', color: !input.trim() || disabled ? 'var(--ink-3)' : '#fff', boxShadow: !input.trim() || disabled ? 'none' : 'var(--shadow-sage)', transition: 'background .2s ease' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l14-7-5 7 5 7-14-7z" /></svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
