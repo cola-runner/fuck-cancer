@@ -68,7 +68,7 @@ export default function SettingsPage() {
                 在服务器主机上运行以下命令重新连接：
               </p>
               <code style={{ marginTop: 8, display: 'block', fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'var(--ink)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 9, padding: '9px 11px', overflowX: 'auto' }}>
-                npx @cola_runner/notebooklm-cli@0.1.4 login --paste --storage &lt;NOTEBOOKLM_STORAGE_PATH&gt;
+                npx --package=@cola_runner/gemini-notebook-cli@0.2.1 gemini-notebook login --paste --storage &lt;NOTEBOOKLM_STORAGE_PATH&gt;
               </code>
               {hint && <p className="fc-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>{hint}</p>}
             </div>

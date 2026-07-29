@@ -14,6 +14,28 @@ import {
 const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 
+export function resolveNotebookLMStoragePath(
+  configuredPath: string | undefined,
+  homeDirectory = homedir()
+): string {
+  if (configuredPath) return configuredPath;
+  const currentPath = join(
+    homeDirectory,
+    ".config",
+    "gemini-notebook-cli",
+    "storage_state.json"
+  );
+  if (existsSync(currentPath)) return currentPath;
+  const legacyPath = join(
+    homeDirectory,
+    ".config",
+    "notebooklm-cli",
+    "storage_state.json"
+  );
+  if (existsSync(legacyPath)) return legacyPath;
+  return currentPath;
+}
+
 function isMemoryDatabase(path: string): boolean {
   return path === ":memory:";
 }
@@ -63,7 +85,7 @@ export function hardenRuntimePermissions(
   preparePrivateFile(paths.databasePath);
   preparePrivateFile(
     paths.notebooklmStoragePath ??
-      join(homedir(), ".config", "notebooklm-cli", "storage_state.json")
+      join(homedir(), ".config", "gemini-notebook-cli", "storage_state.json")
   );
   chmodIfPresent(
     resolve(paths.envPath ?? join(process.cwd(), ".env")),

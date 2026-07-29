@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import Fastify from "fastify";
-import { AuthError } from "@cola_runner/notebooklm-cli";
+import { AuthError } from "@cola_runner/gemini-notebook-cli";
 import { eq } from "drizzle-orm";
 
 Object.assign(process.env, {

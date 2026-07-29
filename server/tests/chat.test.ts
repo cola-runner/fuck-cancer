@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import Fastify from "fastify";
 import { eq, sql } from "drizzle-orm";
-import { AuthError } from "@cola_runner/notebooklm-cli";
+import { AuthError } from "@cola_runner/gemini-notebook-cli";
 
 Object.assign(process.env, {
   DATABASE_PATH: ":memory:",

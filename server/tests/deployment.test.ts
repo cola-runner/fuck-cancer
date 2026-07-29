@@ -99,7 +99,7 @@ test("Docker contexts exclude secrets, medical data, and generated files", () =>
     "data/fuckcancer.db-wal",
     "backup.sqlite",
     "storage_state.json",
-    ".config/notebooklm-cli/storage_state.json",
+    ".config/gemini-notebook-cli/storage_state.json",
     "coverage/lcov.info",
     "server.log",
     ".git/config",
@@ -217,7 +217,10 @@ test("Compose keeps the API internal and mounts only a dedicated session directo
   assert.doesNotMatch(server, /^    ports:\s*$/m);
   assert.match(server, /^    expose:\s*\n      - "3000"\s*$/m);
   assert.match(web, /- "127\.0\.0\.1:5173:80"/);
-  assert.doesNotMatch(compose, /\$\{HOME\}|\.config\/notebooklm-cli/);
+  assert.doesNotMatch(
+    compose,
+    /\$\{HOME\}|\.config\/(?:gemini-notebook-cli|notebooklm-cli)/
+  );
   assert.match(
     server,
     /NOTEBOOKLM_STORAGE_PATH:\s*\/app\/notebooklm-session\/storage_state\.json/
@@ -240,7 +243,53 @@ test("environment example uses the same-origin callback and dedicated session ja
     example,
     /^NOTEBOOKLM_STORAGE_PATH=\.\/notebooklm-session\/storage_state\.json$/m
   );
-  assert.doesNotMatch(example, /\.config\/notebooklm-cli/);
+  assert.doesNotMatch(
+    example,
+    /\.config\/(?:gemini-notebook-cli|notebooklm-cli)/
+  );
+});
+
+test("operator setup uses the published Gemini Notebook CLI", () => {
+  const packageJson = JSON.parse(readRepositoryFile("server/package.json")) as {
+    dependencies: Record<string, string>;
+  };
+  assert.equal(
+    packageJson.dependencies["@cola_runner/gemini-notebook-cli"],
+    "0.2.1"
+  );
+  assert.equal(
+    Object.hasOwn(packageJson.dependencies, "@cola_runner/notebooklm-cli"),
+    false
+  );
+
+  for (const relativePath of [
+    "README.md",
+    "server/.env.example",
+    "server/src/lib/file-security.ts",
+    "server/src/lib/notebooklm.ts",
+    "server/src/routes/settings.ts",
+    "web/src/pages/SettingsPage.tsx",
+  ]) {
+    const content = readRepositoryFile(relativePath);
+    assert.doesNotMatch(content, /@cola_runner\/notebooklm-cli/);
+    assert.doesNotMatch(content, /`notebooklm login/);
+  }
+
+  for (const relativePath of [
+    "server/.env.example",
+    "server/src/lib/notebooklm.ts",
+    "server/src/routes/settings.ts",
+    "web/src/pages/SettingsPage.tsx",
+  ]) {
+    assert.match(readRepositoryFile(relativePath), /\bgemini-notebook login\b/);
+  }
+});
+
+test("operator setup verifies the live Notebook session instead of cookie shape", () => {
+  const readme = readRepositoryFile("README.md");
+
+  assert.match(readme, /\bgemini-notebook list\b/);
+  assert.doesNotMatch(readme, /\bgemini-notebook status\b/);
 });
 
 test("project-local NotebookLM session files are ignored by Git", () => {

@@ -17,7 +17,7 @@ export async function settingsRoutes(fastify: FastifyInstance): Promise<void> {
         connected: notebooklmConnected,
         hint: notebooklmConnected
           ? null
-          : "Run `npx @cola_runner/notebooklm-cli@0.1.4 login --paste --storage <NOTEBOOKLM_STORAGE_PATH>` on the server host.",
+          : "Run `npx --package=@cola_runner/gemini-notebook-cli@0.2.1 gemini-notebook login --paste --storage <NOTEBOOKLM_STORAGE_PATH>` on the server host.",
       },
     });
   });

@@ -14,6 +14,7 @@ server/wrangler.toml
 
 # Local agent tooling / third-party design skill (not part of the product)
 .claude/
+.superpowers/
 .playwright-mcp/
 
 # Design-skill metadata & rendered screenshots (keep prototype source only)

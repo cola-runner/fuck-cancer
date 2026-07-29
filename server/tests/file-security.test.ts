@@ -25,9 +25,9 @@ Object.assign(process.env, {
   NODE_ENV: "test",
 });
 
-const { hardenRuntimePermissions } = await import(
-  "../src/lib/file-security.js"
-);
+const fileSecurity = await import("../src/lib/file-security.js");
+const { hardenRuntimePermissions, resolveNotebookLMStoragePath } =
+  fileSecurity;
 const temporaryRoots: string[] = [];
 
 after(async () => {
@@ -79,4 +79,70 @@ test("运行时把病历、会话和环境文件收紧为仅部署用户可读",
   } finally {
     process.umask(previousUmask);
   }
+});
+
+test("未配置会话路径时继续使用现存的旧版 CLI 会话", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fc-legacy-session-"));
+  temporaryRoots.push(root);
+  const legacyPath = join(
+    root,
+    ".config",
+    "notebooklm-cli",
+    "storage_state.json"
+  );
+  await mkdir(join(root, ".config", "notebooklm-cli"), { recursive: true });
+  await writeFile(legacyPath, "legacy-session");
+
+  assert.equal(resolveNotebookLMStoragePath(undefined, root), legacyPath);
+});
+
+test("新旧默认会话同时存在时优先使用新版 CLI 会话", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fc-current-session-"));
+  temporaryRoots.push(root);
+  const legacyPath = join(
+    root,
+    ".config",
+    "notebooklm-cli",
+    "storage_state.json"
+  );
+  const currentPath = join(
+    root,
+    ".config",
+    "gemini-notebook-cli",
+    "storage_state.json"
+  );
+  await mkdir(join(root, ".config", "notebooklm-cli"), { recursive: true });
+  await mkdir(join(root, ".config", "gemini-notebook-cli"), {
+    recursive: true,
+  });
+  await writeFile(legacyPath, "legacy-session");
+  await writeFile(currentPath, "current-session");
+
+  assert.equal(resolveNotebookLMStoragePath(undefined, root), currentPath);
+});
+
+test("显式配置的会话路径始终优先于默认目录", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fc-explicit-session-"));
+  temporaryRoots.push(root);
+  const configuredPath = join(root, "private", "storage_state.json");
+
+  assert.equal(
+    resolveNotebookLMStoragePath(configuredPath, root),
+    configuredPath
+  );
+});
+
+test("没有默认会话文件时使用新版 CLI 路径", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fc-empty-session-"));
+  temporaryRoots.push(root);
+
+  assert.equal(
+    resolveNotebookLMStoragePath(undefined, root),
+    join(
+      root,
+      ".config",
+      "gemini-notebook-cli",
+      "storage_state.json"
+    )
+  );
 });

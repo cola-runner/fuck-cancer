@@ -1,4 +1,7 @@
-import { NotebookLMClient, AuthError } from "@cola_runner/notebooklm-cli";
+import {
+  AuthError,
+  GeminiNotebookClient,
+} from "@cola_runner/gemini-notebook-cli";
 import { config } from "./config.js";
 
 /**
@@ -11,35 +14,70 @@ import { config } from "./config.js";
  *
  * The session is created lazily on first use and cached. If the cookies are
  * missing/expired the client throws `AuthError`; callers surface that as a
- * "run `notebooklm login`" hint rather than a 500.
+ * "run `gemini-notebook login`" hint rather than a 500.
  */
-let clientPromise: Promise<NotebookLMClient> | null = null;
+interface NotebookLMClientEntry {
+  promise: Promise<GeminiNotebookClient>;
+}
 
-export function getNotebookLM(): Promise<NotebookLMClient> {
-  if (!clientPromise) {
-    clientPromise = NotebookLMClient.fromStorage({
-      // Falls back to ~/.config/notebooklm-cli/storage_state.json when unset.
+let clientEntry: NotebookLMClientEntry | null = null;
+let saveTail: Promise<void> = Promise.resolve();
+
+function persistNotebookLMSession(
+  client: GeminiNotebookClient,
+  entry: NotebookLMClientEntry
+): Promise<void> {
+  const save = saveTail.catch(() => undefined).then(async () => {
+    if (entry !== clientEntry) return;
+    try {
+      await client.save();
+    } catch {
+      console.error(
+        "Notebook session remains usable in memory, but rotated cookies could not be saved. Check storage permissions and free disk space."
+      );
+    }
+  });
+  saveTail = save;
+  return save;
+}
+
+function getNotebookLMEntry(): NotebookLMClientEntry {
+  if (!clientEntry) {
+    const entry = {} as NotebookLMClientEntry;
+    entry.promise = GeminiNotebookClient.fromStorage({
+      // Config prefers the current default and reuses the legacy CLI path on upgrades.
       storagePath: config.notebooklmStoragePath,
     }).catch((err) => {
-      // Don't cache a failed bootstrap — let the next request retry once the
-      // operator has logged in.
-      clientPromise = null;
+      if (clientEntry === entry) {
+        // Don't cache a failed bootstrap — let the next request retry once the
+        // operator has logged in.
+        clientEntry = null;
+      }
       throw err;
     });
+    clientEntry = entry;
   }
-  return clientPromise;
+  return clientEntry;
+}
+
+export function getNotebookLM(): Promise<GeminiNotebookClient> {
+  return getNotebookLMEntry().promise;
+}
+
+function resetNotebookLMEntry(entry: NotebookLMClientEntry): void {
+  if (clientEntry === entry) clientEntry = null;
 }
 
 /**
  * Drop the cached client so the next getNotebookLM() rebuilds it from disk.
  *
  * The cookie jar (storage_state.json) is refreshed out-of-band when the operator
- * re-runs `notebooklm login`. But a client reads those cookies into memory once,
+ * re-runs `gemini-notebook login`. But a client reads those cookies into memory once,
  * at construction — so a client built from an expired jar keeps failing with
  * AuthError even after a successful re-login. Resetting forces a fresh read.
  */
 export function resetNotebookLM(): void {
-  clientPromise = null;
+  clientEntry = null;
 }
 
 /** True when the failure is an expired/missing NotebookLM session. */
@@ -56,19 +94,27 @@ export function isAuthError(err: unknown): boolean {
  * double-run the operation.
  */
 export async function withNotebookLM<T>(
-  op: (client: NotebookLMClient) => Promise<T>
+  op: (client: GeminiNotebookClient) => Promise<T>
 ): Promise<T> {
+  const entry = getNotebookLMEntry();
   try {
-    return await op(await getNotebookLM());
+    const client = await entry.promise;
+    const result = await op(client);
+    await persistNotebookLMSession(client, entry);
+    return result;
   } catch (err) {
     if (!isAuthError(err)) throw err;
-    resetNotebookLM();
+    resetNotebookLMEntry(entry);
+    const retryEntry = getNotebookLMEntry();
     try {
-      return await op(await getNotebookLM());
+      const client = await retryEntry.promise;
+      const result = await op(client);
+      await persistNotebookLMSession(client, retryEntry);
+      return result;
     } catch (retryErr) {
       // Still dead (operator hasn't re-logged-in yet) — clear the cache so the
       // next attempt re-reads disk too, and surface the auth failure.
-      if (isAuthError(retryErr)) resetNotebookLM();
+      if (isAuthError(retryErr)) resetNotebookLMEntry(retryEntry);
       throw retryErr;
     }
   }
@@ -90,7 +136,7 @@ export async function isNotebookLMConnected(): Promise<boolean> {
 }
 
 export const NOTEBOOKLM_AUTH_HINT =
-  "NotebookLM session is missing or expired. On the server host rerun `npx @cola_runner/notebooklm-cli@0.1.4 login --paste --storage <NOTEBOOKLM_STORAGE_PATH>`.";
+  "NotebookLM session is missing or expired. On the server host rerun `npx --package=@cola_runner/gemini-notebook-cli@0.2.1 gemini-notebook login --paste --storage <NOTEBOOKLM_STORAGE_PATH>`.";
 
 // Appended to every research query (manual search and the auto drug-coverage
 // pipeline). The research model itself judges which authoritative sources fit

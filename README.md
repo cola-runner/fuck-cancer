@@ -8,7 +8,7 @@ Cancer treatment isn't a single visit — it's months or years of reports, presc
 
 ## What it does
 
-- **Collect** — Upload medical reports, prescriptions, images, and even raw visit-recording audio. Everything becomes a source in a private [NotebookLM](https://notebooklm.google.com) notebook, one per patient.
+- **Collect** — Upload medical reports, prescriptions, images, and even raw visit-recording audio. Everything becomes a source in a private [NotebookLM](https://notebook.google.com) notebook, one per patient.
 - **Understand** — NotebookLM reads every source natively — PDFs, photos of reports, audio recordings — no manual transcription or OCR step.
 - **Cover drugs automatically** — when you add a document, the app reads the drug names out of it and automatically pulls in the matching **official FDA / DailyMed leaflets** (from a whitelist of authoritative medical sites) as sources. So when you later ask about a medication, answers are grounded in the real label — dosing, interactions, black-box warnings — instead of a guess.
 - **Ask** — Chat with an AI that has the full context of the patient's notebook. Ask about trends, what a result means, how things have changed over time.
@@ -26,7 +26,7 @@ Medical data is sensitive. This app does not retain uploaded binary files — ev
 | Backend | Node.js 24 + Fastify + TypeScript |
 | Frontend | React 19 + Vite + TailwindCSS |
 | Database | SQLite (single file, zero setup) |
-| Storage + AI | NotebookLM, via [`@cola_runner/notebooklm-cli`](https://www.npmjs.com/package/@cola_runner/notebooklm-cli) |
+| Storage + AI | NotebookLM, via [`@cola_runner/gemini-notebook-cli`](https://www.npmjs.com/package/@cola_runner/gemini-notebook-cli) |
 | Auth | Google sign-in (identity only) |
 | Packaging | Docker Compose first, local npm dev second |
 
@@ -59,18 +59,20 @@ chmod 700 server/data server/notebooklm-session
 
 # Preferred: no Playwright or automated Google sign-in.
 # Paste a NotebookLM request copied as cURL from your signed-in browser.
-npx @cola_runner/notebooklm-cli@0.1.4 login --paste \
+npx --package=@cola_runner/gemini-notebook-cli@0.2.1 gemini-notebook login --paste \
   --storage "$PWD/server/notebooklm-session/storage_state.json"
 chmod 600 server/notebooklm-session/storage_state.json
 
-npx @cola_runner/notebooklm-cli@0.1.4 status \
-  --storage "$PWD/server/notebooklm-session/storage_state.json"
+npx --package=@cola_runner/gemini-notebook-cli@0.2.1 gemini-notebook list \
+  --storage "$PWD/server/notebooklm-session/storage_state.json" \
+  >/dev/null && echo "NotebookLM live session connected"
 ```
 
 The paste is read from standard input, so the cookie does not need to appear in
-your shell history or process arguments. The CLI verifies the session before
-saving it. If it expires later, rerun the same `login --paste --storage ...`
-command.
+your shell history or process arguments. The final `list` performs a real
+NotebookLM request without printing notebook names; the lighter `status` command
+only checks whether required cookie names are present. If the session expires
+later, rerun the same `login --paste --storage ...` command.
 
 The browser-driven `login --storage ...` flow is only an optional fallback and
 requires Playwright. The application itself does not need Playwright.
@@ -78,7 +80,7 @@ requires Playwright. The application itself does not need Playwright.
 `storage_state.json` grants access to the connected NotebookLM account. Never
 commit or share it. Docker mounts only `server/notebooklm-session/` read-write,
 because session refresh uses a temporary file and an atomic rename; it does not
-mount `~/.config/notebooklm-cli`.
+mount `~/.config/gemini-notebook-cli`.
 
 ### 3. Google OAuth setup (app sign-in)
 

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { resolveNotebookLMStoragePath } from "./file-security.js";
 
 type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
 
@@ -10,8 +11,8 @@ export interface AppConfig {
   googleClientSecret: string;
   googleRedirectUri: string;
   ownerEmail: string;
-  /** Dedicated NotebookLM cookie jar path. Undefined keeps the CLI default for local backwards compatibility. */
-  notebooklmStoragePath?: string;
+  /** Dedicated NotebookLM cookie jar path, including the legacy default-path fallback. */
+  notebooklmStoragePath: string;
   appOrigin: string;
   corsOrigin: string;
   host: string;
@@ -72,7 +73,14 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+export interface LoadConfigOptions {
+  homeDirectory?: string;
+}
+
+export function loadConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  options: LoadConfigOptions = {}
+): AppConfig {
   const errors: string[] = [];
 
   const jwtSecret = readRequiredEnv(env, "JWT_SECRET", errors);
@@ -82,8 +90,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const googleRedirectUri = readRequiredEnv(env, "GOOGLE_REDIRECT_URI", errors);
   const ownerEmail = normalizeEmail(readRequiredEnv(env, "OWNER_EMAIL", errors));
 
-  const notebooklmStoragePath =
-    env.NOTEBOOKLM_STORAGE_PATH?.trim() || undefined;
+  const notebooklmStoragePath = resolveNotebookLMStoragePath(
+    env.NOTEBOOKLM_STORAGE_PATH?.trim() ||
+      env.GEMINI_NOTEBOOK_STORAGE?.trim() ||
+      env.NOTEBOOKLM_STORAGE?.trim() ||
+      undefined,
+    options.homeDirectory
+  );
   const appOrigin = readOptionalEnv(env, "APP_ORIGIN", "http://localhost:5173");
   const corsOrigin = readOptionalEnv(env, "CORS_ORIGIN", appOrigin);
   const databasePath = readOptionalEnv(env, "DATABASE_PATH", "./data/fuckcancer.db");
