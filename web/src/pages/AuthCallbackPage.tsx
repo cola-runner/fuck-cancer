@@ -1,31 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 
 export default function AuthCallbackPage() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    const authError = searchParams.get('error');
-
-    if (authError) {
-      setError(authError);
-      return;
-    }
-
-    if (!token) {
-      setError('Missing login token');
-      return;
-    }
-
-    login(token)
+    login()
       .then(() => navigate('/cases', { replace: true }))
       .catch(() => setError('Failed to complete login'));
-  }, [login, navigate, searchParams]);
+  }, [login, navigate]);
 
   return (
     <div className="min-h-dvh flex items-center justify-center" style={{ padding: 24 }}>

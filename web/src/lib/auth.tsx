@@ -18,8 +18,8 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (token: string) => Promise<void>;
-  logout: () => void;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -36,15 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
       const { data } = await api.get('/auth/me');
       setUser(data.user);
     } catch {
-      localStorage.removeItem('token');
       setUser(null);
     } finally {
       setLoading(false);
@@ -55,16 +49,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, [fetchUser]);
 
-  const login = async (token: string) => {
-    localStorage.setItem('token', token);
+  const login = useCallback(async () => {
     const { data } = await api.get('/auth/me');
     setUser(data.user);
-  };
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem('token');
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Clear local auth state even if the network is unavailable.
+    }
     setUser(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>
