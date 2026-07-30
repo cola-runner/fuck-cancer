@@ -19,9 +19,52 @@ Object.assign(process.env, {
   NODE_ENV: "test",
 });
 
-const { getNotebookLM, resetNotebookLM, withNotebookLM } = await import(
-  "../src/lib/notebooklm.js"
-);
+const {
+  getNotebookLM,
+  refreshNotebookLMSession,
+  resetNotebookLM,
+  withNotebookLM,
+} = await import("../src/lib/notebooklm.js");
+
+test("后台心跳只刷新认证并持久化会话", async () => {
+  let refreshCount = 0;
+  let saveCount = 0;
+  const client = {
+    session: {
+      refreshTokens: async () => {
+        refreshCount += 1;
+      },
+    },
+    notebooks: {
+      list: async () => {
+        throw new Error("heartbeat must not list notebooks");
+      },
+    },
+    save: async () => {
+      saveCount += 1;
+    },
+  } as unknown as GeminiNotebookClient;
+  const original = Object.getOwnPropertyDescriptor(
+    GeminiNotebookClient,
+    "fromStorage"
+  );
+  Object.defineProperty(GeminiNotebookClient, "fromStorage", {
+    configurable: true,
+    value: async () => client,
+  });
+  resetNotebookLM();
+
+  try {
+    await refreshNotebookLMSession();
+    assert.equal(refreshCount, 1);
+    assert.equal(saveCount, 1);
+  } finally {
+    resetNotebookLM();
+    if (original) {
+      Object.defineProperty(GeminiNotebookClient, "fromStorage", original);
+    }
+  }
+});
 
 test("成功调用 Notebook 后持久化轮换后的会话 Cookie", async () => {
   let saveCount = 0;

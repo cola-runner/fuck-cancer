@@ -292,6 +292,31 @@ test("operator setup verifies the live Notebook session instead of cookie shape"
   assert.doesNotMatch(readme, /\bgemini-notebook status\b/);
 });
 
+test("server lifecycle starts and stops the Notebook heartbeat", () => {
+  const entrypoint = readRepositoryFile("server/src/index.ts");
+  const listenPosition = entrypoint.indexOf("await fastify.listen");
+  const startPosition = entrypoint.indexOf("notebookLMHeartbeat.start()");
+
+  assert.match(
+    entrypoint,
+    /const notebookLMHeartbeat = createNotebookLMHeartbeat\(\{/
+  );
+  assert.match(
+    entrypoint,
+    /fastify\.addHook\("onClose", async \(\) => \{\s*await notebookLMHeartbeat\.stop\(\);\s*\}\);/
+  );
+  assert.ok(listenPosition >= 0);
+  assert.ok(
+    startPosition > listenPosition,
+    "heartbeat must start only after the server is listening"
+  );
+  assert.match(
+    entrypoint,
+    /errorType:\s*error instanceof Error \? error\.name : "UnknownError"/
+  );
+  assert.doesNotMatch(entrypoint, /fastify\.log\.warn\(\{\s*(?:err|error)\s*\}/);
+});
+
 test("project-local NotebookLM session files are ignored by Git", () => {
   const result = spawnSync(
     "git",

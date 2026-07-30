@@ -120,6 +120,12 @@ export async function withNotebookLM<T>(
   }
 }
 
+export async function refreshNotebookLMSession(): Promise<void> {
+  await withNotebookLM(async (client) => {
+    await client.session.refreshTokens();
+  });
+}
+
 /**
  * Actively verify the session with a cheap RPC. Constructing the client only
  * reads cookies offline and cannot tell a live session from a dead one, so the

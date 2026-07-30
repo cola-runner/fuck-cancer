@@ -5,6 +5,7 @@ import multipart from "@fastify/multipart";
 
 import { config } from "./lib/config.js";
 import { hardenRuntimePermissions } from "./lib/file-security.js";
+import { createNotebookLMHeartbeat } from "./lib/notebooklm-heartbeat.js";
 import { authRoutes } from "./routes/auth.js";
 import { casesRoutes } from "./routes/cases.js";
 import { documentsRoutes } from "./routes/documents.js";
@@ -20,6 +21,21 @@ const fastify = Fastify({
         ? { target: "pino-pretty" }
         : undefined,
   },
+});
+
+const notebookLMHeartbeat = createNotebookLMHeartbeat({
+  onError(error) {
+    fastify.log.warn(
+      {
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      },
+      "Notebook session heartbeat failed"
+    );
+  },
+});
+
+fastify.addHook("onClose", async () => {
+  await notebookLMHeartbeat.stop();
 });
 
 async function start(): Promise<void> {
@@ -64,6 +80,7 @@ async function start(): Promise<void> {
   const host = config.host;
 
   await fastify.listen({ port, host });
+  notebookLMHeartbeat.start();
   fastify.log.info(`Server running at http://${host}:${port}`);
 }
 
